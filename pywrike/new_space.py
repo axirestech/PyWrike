@@ -1,6 +1,38 @@
 import requests
 import json
 import pandas as pd
+from PyWrike.gateways import OAuth2Gateway1
+
+# Function to validate the access token
+def validate_token(api_token):
+    endpoint = 'https://www.wrike.com/api/v4/contacts'
+    headers = {
+        'Authorization': f'Bearer {api_token}'
+    }
+    
+    response = requests.get(endpoint, headers=headers)
+    if response.status_code == 200:
+        print("Access token is valid.")
+        return True
+    else:
+        print(f"Access token is invalid. Status code: {response.status_code}")
+        return False
+
+# Function to authenticate using OAuth2 if the token is invalid
+def authenticate_with_oauth2(client_id, client_secret, redirect_url):
+    wrike = OAuth2Gateway1(client_id=client_id, client_secret=client_secret)
+    
+    # Start the OAuth2 authentication process
+    auth_info = {
+        'redirect_uri': redirect_url
+    }
+    
+    # Perform OAuth2 authentication and retrieve the access token
+    api_token = wrike.authenticate(auth_info=auth_info)
+    
+    print(f"New access token obtained: {api_token}")
+    return api_token
+
 
 # Function to read configuration from Excel
 def read_config_from_excel(file_path):
@@ -44,6 +76,56 @@ def create_new_space(original_space, new_title, api_token):
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
     return response.json()['data'][0]
+
+# Function to get custom fields in a space
+def get_custom_fields(api_token):
+    url = f'{BASE_URL}/customfields'
+    headers = {'Authorization': f'Bearer {api_token}'}
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()['data']
+
+# Function to create a new custom field scoped to the new space
+def create_custom_field(field_data, new_space_id, api_token):
+    url = f'{BASE_URL}/customfields'
+    headers = {'Authorization': f'Bearer {api_token}', 'Content-Type': 'application/json'}
+    payload = {
+        "title": field_data.get("title"),
+        "type": field_data.get("type"),  # e.g., 'Text', 'Numeric', 'DropDown'
+        "settings": field_data.get("settings", {}),
+        "spaceId": new_space_id  # Set the new space ID as the scope
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+
+    return response.json()['data'][0]
+
+# Function to map custom fields from the original space to the new space
+def map_custom_fields(original_fields, original_space_id, new_space_id, api_token):
+    field_mapping = {}
+           
+    # Step 1: Filter original fields by spaceId
+    filtered_original_fields = [
+        field for field in original_fields
+        if field.get('spaceId') == original_space_id
+    ]
+
+    for field in filtered_original_fields:
+        # Check if the field has a valid 'scope' and belongs to the original space
+        field_scope = field.get('spaceId', [])
+        
+        if field_scope == original_space_id:
+            print(f"Creating new custom field: {field['title']}")
+            # Create the custom field in the new space
+            new_field = create_custom_field(field, new_space_id, api_token)
+            # Map the old field ID to the new field ID
+            field_mapping[field['id']] = new_field['id']
+            print(f"Mapped Custom Field: {field['title']} -> New Field ID: {new_field['id']}")
+        else:
+            print(f"Field {field['title']} is skipped due to missing or invalid scope.")
+
+    return field_mapping
 
 # Function to get folders in a space
 def get_folders_in_space(space_id, api_token):
@@ -98,7 +180,7 @@ def find_task_across_folders(task_id, folders, api_token):
                 return task
     return None
 
-def create_or_update_task(new_folder_id, task_data, task_map, api_token, folders, folder_mapping, is_subtask=False):
+def create_or_update_task(new_folder_id, task_data, task_map, api_token, folders, folder_mapping, custom_field_mapping, is_subtask=False):
     task_key = task_data['title'] + "|" + str(task_data.get('dates', {}).get('due', ''))
 
     # Determine if this is a subtask and handle parent task creation first
@@ -127,7 +209,16 @@ def create_or_update_task(new_folder_id, task_data, task_map, api_token, folders
                 super_task_id = parent_task[0]['id'] if parent_task else None
         else:
             super_task_id = task_map[parent_task_key]
-
+    # Map custom fields for the task
+    mapped_custom_fields = []
+    for field in task_data.get('customFields', []):
+        field_id = field['id']
+        if field_id in custom_field_mapping:
+            mapped_custom_fields.append({
+                'id': custom_field_mapping[field_id],
+                'value': field['value']
+            })
+    
     # Check if the task already exists
     if task_key in task_map:
         existing_task_id = task_map[task_key]
@@ -135,7 +226,7 @@ def create_or_update_task(new_folder_id, task_data, task_map, api_token, folders
         # Get the details of the existing task to check its current parents
         existing_task_details = get_task_details(existing_task_id, api_token)
         current_parents = existing_task_details.get('parentIds', [])
-
+      
         # Only update if the new folder is not already a parent
         if not is_subtask and new_folder_id not in current_parents:
             url = f'{BASE_URL}/tasks/{existing_task_id}'
@@ -161,20 +252,22 @@ def create_or_update_task(new_folder_id, task_data, task_map, api_token, folders
             new_folder_id=new_folder_id if not is_subtask else None,
             task_data=task_data,
             super_task_id=super_task_id,
-            api_token=api_token
+            api_token=api_token,
+            mapped_custom_fields=mapped_custom_fields  # Pass the mapped custom fields
         )
+
         task_map[task_key] = created_task[0]['id']
 
         # Handle subtask creation for the newly created task
         for sub_task_id in task_data.get('subTaskIds', []):
             subtask_data = get_task_details(sub_task_id, api_token)
-            create_or_update_task(new_folder_id, subtask_data, task_map, api_token, folders, folder_mapping, is_subtask=True)
+            create_or_update_task(new_folder_id, subtask_data, task_map, api_token, folders, folder_mapping, custom_field_mapping, is_subtask=True)
 
         return created_task
 
 
 # Function to create folders recursively, updating the folder_mapping with original-new folder relationships
-def create_folders_recursively(paths, root_folder_id, original_space_name, new_space_name, api_token, folders):
+def create_folders_recursively(paths, root_folder_id, original_space_name, new_space_name, api_token, folders, custom_field_mapping):
     folder_id_map = {}
     folder_mapping = {}
     new_paths_info = []
@@ -188,7 +281,7 @@ def create_folders_recursively(paths, root_folder_id, original_space_name, new_s
             # Process tasks in the root space
             root_tasks = get_tasks_in_folder(path['id'], api_token)
             for task in root_tasks:
-                create_or_update_task(new_folder_id=root_folder_id, task_data=task, task_map=task_map, api_token=api_token, folders=folders, folder_mapping=folder_mapping)
+                create_or_update_task(new_folder_id=root_folder_id, task_data=task, task_map=task_map, api_token=api_token, folders=folders, folder_mapping=folder_mapping, custom_field_mapping=custom_field_mapping)
             continue
 
         # If the folder_path is a subfolder, continue with the usual process
@@ -215,14 +308,9 @@ def create_folders_recursively(paths, root_folder_id, original_space_name, new_s
         # Process tasks in the current folder
         folder_tasks = get_tasks_in_folder(path['id'], api_token)
         for task in folder_tasks:
-            create_or_update_task(new_folder_id=parent_id, task_data=task, task_map=task_map, api_token=api_token, folders=folders, folder_mapping=folder_mapping)
+            create_or_update_task(new_folder_id=parent_id, task_data=task, task_map=task_map, api_token=api_token, folders=folders, folder_mapping=folder_mapping, custom_field_mapping=custom_field_mapping)
 
     return new_paths_info
-
-
-
-
-
 
 
 def get_task_key_by_id(task_id, api_token, task_map):
@@ -231,8 +319,7 @@ def get_task_key_by_id(task_id, api_token, task_map):
     return task_key
 
 
-# Function to create new tasks or subtasks
-def create_task(new_folder_id=None, task_data=None, super_task_id=None, api_token=None):
+def create_task(new_folder_id=None, task_data=None, super_task_id=None, api_token=None, mapped_custom_fields=None):
     url = f'{BASE_URL}/folders/{new_folder_id}/tasks' if new_folder_id else f'{BASE_URL}/tasks'
     headers = {
         'Authorization': f'Bearer {api_token}',
@@ -274,7 +361,7 @@ def create_task(new_folder_id=None, task_data=None, super_task_id=None, api_toke
         "customStatus": task_data.get("customStatusId", ""),
         "importance": task_data.get("importance", ""),
         "metadata": task_data.get("metadata", []),
-        "customFields": task_data.get("customFields", [])
+        "customFields": mapped_custom_fields or []  # Use the provided mapped custom fields
     }
     
     if dates:
@@ -307,7 +394,7 @@ def create_folder(title, parent_id, api_token):
     response.raise_for_status()
     return response.json()['data'][0]['id']
 
-def main():
+def new_space_main():
     # Prompt for the Excel file path
     excel_path = input("Please enter the path to the Excel file with configuration: ")
     
@@ -317,6 +404,13 @@ def main():
     api_token = config.get('Token')
     space_name = config.get('Space to extract data from')
     new_space_title = config.get('New Space Title')
+
+        # Validate the token
+    if not validate_token(api_token):
+        # If the token is invalid, authenticate using OAuth2 and update the access_token
+        wrike = OAuth2Gateway1(excel_filepath=excel_path)
+        api_token = wrike._create_auth_info()  # Perform OAuth2 authentication
+        print(f"New access token obtained: {api_token}")
     
     if not api_token or not space_name or not new_space_title:
         print("Error: Missing necessary configuration details.")
@@ -341,7 +435,11 @@ def main():
     if not folders:
         print(f"No folders found in the space '{space_name}'.")
         return
-    
+
+   # Fetch and map custom fields
+    original_custom_fields = get_custom_fields(api_token)
+    custom_field_mapping = map_custom_fields(original_custom_fields, original_space['id'], new_space['id'], api_token)
+
     all_paths = []
     for folder in folders:
         if "scope" in folder and folder["scope"] == "WsFolder":
@@ -349,8 +447,8 @@ def main():
             all_paths.extend(paths)
     
     new_root_folder_id = new_space['id']
-    new_paths_info = create_folders_recursively(all_paths, new_root_folder_id, space_name, new_space_title, api_token, folders)
+    new_paths_info = create_folders_recursively(all_paths, new_root_folder_id, space_name, new_space_title, api_token, folders, custom_field_mapping)
 
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__new_space_main__":
+    new_space_main()
+   

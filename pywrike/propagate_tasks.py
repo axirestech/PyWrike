@@ -1,5 +1,37 @@
 import requests
 import pandas as pd
+from PyWrike.gateways import OAuth2Gateway1
+
+# Function to validate the access token
+def validate_token(access_token):
+    endpoint = 'https://www.wrike.com/api/v4/contacts'
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+    
+    response = requests.get(endpoint, headers=headers)
+    if response.status_code == 200:
+        print("Access token is valid.")
+        return True
+    else:
+        print(f"Access token is invalid. Status code: {response.status_code}")
+        return False
+
+# Function to authenticate using OAuth2 if the token is invalid
+def authenticate_with_oauth2(client_id, client_secret, redirect_url):
+    wrike = OAuth2Gateway1(client_id=client_id, client_secret=client_secret)
+    
+    # Start the OAuth2 authentication process
+    auth_info = {
+        'redirect_uri': redirect_url
+    }
+    
+    # Perform OAuth2 authentication and retrieve the access token
+    access_token = wrike.authenticate(auth_info=auth_info)
+    
+    print(f"New access token obtained: {access_token}")
+    return access_token
+
 
 # Function to create a folder in a given space and parent folder
 def create_folder_in_space(folder_name, parent_folder_id, access_token):
@@ -158,7 +190,7 @@ def update_task_with_parent_id(task_id, parent_ids, access_token):
 
 
 # Main function to handle reading from Excel and updating tasks
-def main():
+def propagate_tasks_main():
     # Ask the user to input the path of the Excel file
     excel_file = input("Please enter the full path to the Excel file: ")
 
@@ -166,6 +198,13 @@ def main():
     config_df = pd.read_excel(excel_file, sheet_name='Config', header=1)
     access_token = config_df.at[0, 'Token']
 
+    # Validate the token
+    if not validate_token(access_token):
+        # If the token is invalid, authenticate using OAuth2 and update the access_token
+        wrike = OAuth2Gateway1(excel_filepath=excel_file)
+        access_token = wrike._create_auth_info()  # Perform OAuth2 authentication
+        print(f"New access token obtained: {access_token}")
+        
     # Load the propagation details from the file (assuming 'Space Name', 'Source Path', 'Task Title', 'Destination Path' columns)
     propagate_df = pd.read_excel(excel_file, sheet_name='Propagate')
 
@@ -184,7 +223,7 @@ def main():
 
         # Get the space ID by space name
         space_id = get_space_id_by_name(space_name, access_token)
-
+        
         # Get the ID of the source folder
         source_folder_id = get_folder_id_by_path(source_path, space_id, access_token)
         if not source_folder_id:
@@ -229,5 +268,5 @@ def main():
                 print(f"Task '{task_id}' updated successfully with new parent ID: '{destination_folder_id}'")
 
 # Call the main function
-if __name__ == '__main__':
-    main()
+if __name__ == '__propagate_tasks_main__':
+    propagate_tasks_main()

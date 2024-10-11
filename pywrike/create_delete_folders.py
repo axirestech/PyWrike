@@ -1,5 +1,36 @@
 import requests
 import pandas as pd
+from PyWrike.gateways import OAuth2Gateway1
+
+# Function to validate the access token
+def validate_token(access_token):
+    endpoint = 'https://www.wrike.com/api/v4/contacts'
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+    
+    response = requests.get(endpoint, headers=headers)
+    if response.status_code == 200:
+        print("Access token is valid.")
+        return True
+    else:
+        print(f"Access token is invalid. Status code: {response.status_code}")
+        return False
+
+# Function to authenticate using OAuth2 if the token is invalid
+def authenticate_with_oauth2(client_id, client_secret, redirect_url):
+    wrike = OAuth2Gateway1(client_id=client_id, client_secret=client_secret)
+    
+    # Start the OAuth2 authentication process
+    auth_info = {
+        'redirect_uri': redirect_url
+    }
+    
+    # Perform OAuth2 authentication and retrieve the access token
+    access_token = wrike.authenticate(auth_info=auth_info)
+    
+    print(f"New access token obtained: {access_token}")
+    return access_token
 
 # Function to get the ID of a folder by its name
 def get_folder_id_by_name(folder_name, access_token):
@@ -130,26 +161,25 @@ def delete_wrike_project(access_token, parent_folder_id, project_title):
         print(response.text)
 
 # Main function to handle project and folder creation and deletion
-def main():
+def create_delete_folders_main():
     excel_file = input("Enter the path to the Excel file: ")
     try:
         config_df = pd.read_excel(excel_file, sheet_name="Config", header=1)
         project_df = pd.read_excel(excel_file, sheet_name="Projects")
-        print("Excel file loaded successfully.")
     except Exception as e:
         print(f"Failed to read Excel file: {e}")
-        return
+        return 
 
+    access_token = config_df.at[0, "Token"]
+    folder_path = config_df.at[0, "Project Folder Path"]
+        # Validate the token
+    if not validate_token(access_token):
+        # If the token is invalid, authenticate using OAuth2 and update the access_token
+        wrike = OAuth2Gateway1(excel_filepath=excel_file)
+        access_token = wrike._create_auth_info()  # Perform OAuth2 authentication
+        print(f"New access token obtained: {access_token}")
+        
     
-
-    try:
-        access_token = config_df.at[0, "Token"]
-        folder_path = config_df.at[0, "Project Folder Path"]
-        print(f"Access token and folder path retrieved: {access_token}, {folder_path}")
-    except KeyError as e:
-        print(f"KeyError: {e} - Please check that the column names are correct.")
-        return
-
     parent_folder_id = get_folder_id_by_name(folder_path, access_token)
     if not parent_folder_id:
         print("Parent folder ID not found.")
@@ -202,5 +232,5 @@ def main():
         else:
             print(f"Project '{project_name.strip()}' not found, skipping deletion.")
 
-if __name__ == '__main__':
-    main()
+if __name__ == '__create_delete_folders_main__':
+    create_delete_folders_main()

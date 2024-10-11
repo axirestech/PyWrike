@@ -1,5 +1,36 @@
 import requests
 import pandas as pd
+from PyWrike.gateways import OAuth2Gateway1
+
+# Function to validate the access token
+def validate_token(access_token):
+    endpoint = 'https://www.wrike.com/api/v4/contacts'
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+    
+    response = requests.get(endpoint, headers=headers)
+    if response.status_code == 200:
+        print("Access token is valid.")
+        return True
+    else:
+        print(f"Access token is invalid. Status code: {response.status_code}")
+        return False
+
+# Function to authenticate using OAuth2 if the token is invalid
+def authenticate_with_oauth2(client_id, client_secret, redirect_url):
+    wrike = OAuth2Gateway1(client_id=client_id, client_secret=client_secret)
+    
+    # Start the OAuth2 authentication process
+    auth_info = {
+        'redirect_uri': redirect_url
+    }
+    
+    # Perform OAuth2 authentication and retrieve the access token
+    access_token = wrike.authenticate(auth_info=auth_info)
+    
+    print(f"New access token obtained: {access_token}")
+    return access_token
 
 # Function to get the space ID by space name
 def get_space_id_by_name(space_name, access_token):
@@ -260,9 +291,34 @@ def cache_subtasks_from_tasks(cached_tasks, access_token):
     cached_tasks.extend(new_subtasks)
     print(f"[DEBUG] Cached {len(new_subtasks)} new subtasks.")
 
+def get_custom_fields(access_token):
+    endpoint = 'https://www.wrike.com/api/v4/customfields'
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+    
+    response = requests.get(endpoint, headers=headers)
+    
+    if response.status_code == 200:
+        custom_fields_data = response.json()
+        return {field['title']: field['id'] for field in custom_fields_data['data']}  # Map custom field names to their IDs
+    else:
+        print(f"Failed to fetch custom fields. Status code: {response.status_code}")
+        print(response.text)
+        return {}
 
+def map_excel_headings_to_custom_fields(headings, wrike_custom_fields):
+    mapped_custom_fields = {}
 
+    for heading in headings:
+        clean_heading = heading.strip()  # Remove leading/trailing spaces
+        if clean_heading in wrike_custom_fields:
+            mapped_custom_fields[clean_heading] = wrike_custom_fields[clean_heading]
+        else:
+            print(f"[WARNING] No match found for Excel heading '{heading}' in Wrike custom fields")
+    return mapped_custom_fields
 
+    
 def get_task_by_id(task_id, access_token):
     endpoint = f'https://www.wrike.com/api/v4/tasks/{task_id}'
     headers = {
@@ -498,7 +554,30 @@ def create_task(folder_id, task_data, responsible_ids, access_token):
             "start": task_data.get("start_date"),
             "due": task_data.get("end_date")
         }
+ 
+    # Get custom fields from API
+    custom_fields = get_custom_fields(access_token)
 
+    # Map Excel headings to Wrike custom fields
+    mapped_custom_fields = map_excel_headings_to_custom_fields(task_df.columns, custom_fields)
+    print (mapped_custom_fields)
+
+    # Then retrieve the custom fields
+    custom_fields_payload = []
+    for field_name, field_id in mapped_custom_fields.items():
+        field_value = task_data.get(field_name) 
+        print(f"[DEBUG] Task Data: {task_data}")
+        print(f"Retrieving '{field_name}' from task data: '{field_value}'")  # Debugging line
+        if pd.notna(field_value):
+            custom_fields_payload.append({
+                "id": field_id,
+                "value": str(field_value)  # Wrike expects the custom field values as strings
+            })
+        if custom_fields_payload:
+            payload["customFields"] = custom_fields_payload
+
+    
+    print(f"[DEBUG] Final payload being sent: {payload}")
     response = requests.post(endpoint, headers=headers, json=payload)
     
     if response.status_code == 200:
@@ -543,6 +622,18 @@ def create_subtask(parent_task_id, subtask_data, responsible_ids, access_token):
             "due": subtask_data.get("end_date")
         }
 
+    # Add custom fields dynamically
+    custom_fields_payload = []
+    for field_name, field_value in task_data.items():
+        if field_name in custom_fields and pd.notna(field_value):
+            custom_fields_payload.append({
+                "id": custom_fields[field_name],
+                "value": str(field_value)  # Wrike requires custom field values to be strings
+            })
+    
+    if custom_fields_payload:
+        payload["customFields"] = custom_fields_payload
+   
     response = requests.post(endpoint, headers=headers, json=payload)
 
     if response.status_code == 200:
@@ -554,7 +645,8 @@ def create_subtask(parent_task_id, subtask_data, responsible_ids, access_token):
         print(response.text)
         return None
 
-def main():
+def create_update_tasks_main():
+    global task_df
     excel_file = input("Enter the path to the Excel file: ")
     try:
         config_df = pd.read_excel(excel_file, sheet_name="Config", header=1)
@@ -563,7 +655,15 @@ def main():
         print(f"Failed to read Excel file: {e}")
         return
 
+    headings = list(task_df.columns)
+
     access_token = config_df.at[0, "Token"]
+        # Validate the token
+    if not validate_token(access_token):
+        # If the token is invalid, authenticate using OAuth2 and update the access_token
+        wrike = OAuth2Gateway1(excel_filepath=excel_file)
+        access_token = wrike._create_auth_info()  # Perform OAuth2 authentication
+        print(f"New access token obtained: {access_token}")
 
     cached_tasks_by_space = {}  # Dictionary to store cached tasks by space
 
@@ -627,6 +727,16 @@ def main():
             "end_date": row.get("End Date")
         }
 
+                # Dynamically add any custom field columns to task_data
+        for col_name in row.index:
+            if col_name not in task_data:  # If this column is not already part of task_data
+                field_value = row.get(col_name, "")
+                if pd.notna(field_value):
+                    task_data[col_name] = str(field_value).strip() if isinstance(field_value, str) else str(field_value)
+                else:
+                    task_data[col_name] = ""
+
+
         # Check if parent task title is provided (Subtask scenario)
         if pd.notna(parent_task_title):
             if parent_task_path:
@@ -647,5 +757,5 @@ def main():
             print(f"[DEBUG] Creating standalone task '{task_data['title']}' in folder '{folder_path}'.")
             create_task_in_folder(folder_id, space_id, task_data, access_token)
 
-if __name__ == '__main__':
-    main()
+if __name__ == '__create_update_tasks_main__':
+    create_update_tasks_main()
