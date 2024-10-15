@@ -291,7 +291,11 @@ def cache_subtasks_from_tasks(cached_tasks, access_token):
     cached_tasks.extend(new_subtasks)
     print(f"[DEBUG] Cached {len(new_subtasks)} new subtasks.")
 
-def get_custom_fields(access_token):
+import requests
+import pandas as pd
+
+# Function to retrieve custom fields and filter by space
+def get_custom_fields_by_space(access_token, space_id):
     endpoint = 'https://www.wrike.com/api/v4/customfields'
     headers = {
         'Authorization': f'Bearer {access_token}'
@@ -301,22 +305,100 @@ def get_custom_fields(access_token):
     
     if response.status_code == 200:
         custom_fields_data = response.json()
-        return {field['title']: field['id'] for field in custom_fields_data['data']}  # Map custom field names to their IDs
+
+        # Create a mapping of custom field title to a list of {id, spaces} dicts
+        custom_fields = {}
+        for field in custom_fields_data['data']:
+            field_spaces = field.get('spaceId', [])  # Get the spaces where the custom field is applied
+            if space_id in field_spaces:  # Only add custom fields that belong to the specific space
+                custom_fields[field['title']] = {'id': field['id'], 'spaces': field_spaces}
+        
+        return custom_fields
     else:
         print(f"Failed to fetch custom fields. Status code: {response.status_code}")
         print(response.text)
         return {}
 
+# Function to map Excel headings to custom fields by name and space
 def map_excel_headings_to_custom_fields(headings, wrike_custom_fields):
     mapped_custom_fields = {}
 
     for heading in headings:
         clean_heading = heading.strip()  # Remove leading/trailing spaces
         if clean_heading in wrike_custom_fields:
-            mapped_custom_fields[clean_heading] = wrike_custom_fields[clean_heading]
+            mapped_custom_fields[clean_heading] = wrike_custom_fields[clean_heading]['id']
         else:
             print(f"[WARNING] No match found for Excel heading '{heading}' in Wrike custom fields")
+    
     return mapped_custom_fields
+
+# Task creation function with space-specific custom field mapping
+def create_task(folder_id, space_id, task_data, responsible_ids, access_token):
+    endpoint = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+    
+    payload = {
+        "title": task_data.get("title", ""),
+        "responsibles": responsible_ids
+    }
+    
+    if "importance" in task_data and pd.notna(task_data["importance"]) and task_data["importance"]:
+        payload["importance"] = task_data["importance"]
+    
+    if "description" in task_data and pd.notna(task_data["description"]) and task_data["description"]:
+        payload["description"] = task_data["description"]
+    
+    if pd.notna(task_data.get("start_date")) and pd.notna(task_data.get("end_date")):
+        payload["dates"] = {
+            "start": task_data.get("start_date"),
+            "due": task_data.get("end_date")
+        }
+
+    # Get custom fields from API specific to the space
+    custom_fields = get_custom_fields_by_space(access_token, space_id)
+
+    # Map Excel headings to Wrike custom fields
+    mapped_custom_fields = map_excel_headings_to_custom_fields(task_data.keys(), custom_fields)
+    print(f"[DEBUG] Mapped Custom Fields: {mapped_custom_fields}")
+
+    # Create custom fields payload
+    custom_fields_payload = []
+    for field_name, field_id in mapped_custom_fields.items():
+        field_value = task_data.get(field_name) 
+        print(f"[DEBUG] Retrieving '{field_name}' from task data: '{field_value}'") 
+        
+        if pd.notna(field_value):
+            custom_fields_payload.append({
+                "id": field_id,
+                "value": str(field_value)  # Wrike expects the custom field values as strings
+            })
+    
+    if custom_fields_payload:
+        payload["customFields"] = custom_fields_payload
+
+    print(f"[DEBUG] Final payload being sent: {payload}")
+    response = requests.post(endpoint, headers=headers, json=payload)
+    
+    if response.status_code == 200:
+        task_data_response = response.json()  # Parse the JSON response to get the task data
+        print(f"[DEBUG] Response JSON: {task_data_response}")  # Print out the entire response for inspection
+
+        # Check if the expected data structure is present
+        if 'data' in task_data_response and len(task_data_response['data']) > 0:
+            task_data = task_data_response['data'][0]
+            print(f"Task '{task_data['title']}' created successfully in folder '{folder_id}'")
+            return task_data  # Return the first task in the data list
+        else:
+            print(f"[ERROR] Unexpected response structure: {task_data_response}")
+            return None  # Handle the unexpected structure gracefully
+    else:
+        print(f"Failed to create task '{task_data.get('title', '')}' in folder '{folder_id}'. Status code: {response.status_code}")
+        print(response.text)
+        return None  # Return None if the task creation fails
+
 
     
 def get_task_by_id(task_id, access_token):
@@ -441,7 +523,7 @@ def create_task_in_folder(folder_id, space_id, task_data, access_token):
         print(f"[DEBUG] Updated task '{task_data['title']}' with new folder tag '{folder_id}'.")
     else:
         print(f"[DEBUG] Task '{task_data['title']}' does not exist in space '{space_id}'. Creating a new task.")
-        new_task = create_task(folder_id, task_data, responsible_ids, access_token)
+        new_task = create_task(folder_id, space_id, task_data, responsible_ids, access_token)
         # Update the cache with the newly created task
         # Ensure the new task is not None and has an ID
         if new_task and 'id' in new_task:
@@ -522,7 +604,7 @@ def create_subtask_in_parent_task(parent_task_id, space_id, subtask_data, access
         print(f"[DEBUG] Updated subtask '{subtask_data['title']}' with new parent task '{parent_task_id}'.")
     else:
         print(f"[DEBUG] Subtask '{subtask_data['title']}' does not exist in space '{space_id}'. Creating a new subtask.")
-        new_subtask = create_subtask(parent_task_id, subtask_data, responsible_ids, access_token)
+        new_subtask = create_subtask(parent_task_id, space_id, subtask_data, responsible_ids, access_token)
         
         # Update the cache with the newly created subtask
         if new_subtask and 'id' in new_subtask:
@@ -531,73 +613,9 @@ def create_subtask_in_parent_task(parent_task_id, space_id, subtask_data, access
         else:
             print(f"[DEBUG] Failed to create the subtask or retrieve subtask ID.")
 
-def create_task(folder_id, task_data, responsible_ids, access_token):
-    endpoint = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks'
-    headers = {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json'
-    }
-    
-    payload = {
-        "title": task_data.get("title", ""),
-        "responsibles": responsible_ids
-    }
-    
-    if "importance" in task_data and pd.notna(task_data["importance"]) and task_data["importance"]:
-        payload["importance"] = task_data["importance"]
-    
-    if "description" in task_data and pd.notna(task_data["description"]) and task_data["description"]:
-        payload["description"] = task_data["description"]
-    
-    if pd.notna(task_data.get("start_date")) and pd.notna(task_data.get("end_date")):
-        payload["dates"] = {
-            "start": task_data.get("start_date"),
-            "due": task_data.get("end_date")
-        }
- 
-    # Get custom fields from API
-    custom_fields = get_custom_fields(access_token)
 
-    # Map Excel headings to Wrike custom fields
-    mapped_custom_fields = map_excel_headings_to_custom_fields(task_df.columns, custom_fields)
-    print (mapped_custom_fields)
 
-    # Then retrieve the custom fields
-    custom_fields_payload = []
-    for field_name, field_id in mapped_custom_fields.items():
-        field_value = task_data.get(field_name) 
-        print(f"[DEBUG] Task Data: {task_data}")
-        print(f"Retrieving '{field_name}' from task data: '{field_value}'")  # Debugging line
-        if pd.notna(field_value):
-            custom_fields_payload.append({
-                "id": field_id,
-                "value": str(field_value)  # Wrike expects the custom field values as strings
-            })
-        if custom_fields_payload:
-            payload["customFields"] = custom_fields_payload
-
-    
-    print(f"[DEBUG] Final payload being sent: {payload}")
-    response = requests.post(endpoint, headers=headers, json=payload)
-    
-    if response.status_code == 200:
-        task_data_response = response.json()  # Parse the JSON response to get the task data
-        print(f"[DEBUG] Response JSON: {task_data_response}")  # Print out the entire response for inspection
-
-        # Check if the expected data structure is present
-        if 'data' in task_data_response and len(task_data_response['data']) > 0:
-            task_data = task_data_response['data'][0]
-            print(f"Task '{task_data['title']}' created successfully in folder '{folder_id}'")
-            return task_data  # Return the first task in the data list
-        else:
-            print(f"[ERROR] Unexpected response structure: {task_data_response}")
-            return None  # Handle the unexpected structure gracefully
-    else:
-        print(f"Failed to create task '{task_data.get('title', '')}' in folder '{folder_id}'. Status code: {response.status_code}")
-        print(response.text)
-        return None  # Return None if the task creation fails
-
-def create_subtask(parent_task_id, subtask_data, responsible_ids, access_token):
+def create_subtask(parent_task_id, space_id, subtask_data, responsible_ids, access_token):
     endpoint = f'https://www.wrike.com/api/v4/tasks'
     headers = {
         'Authorization': f'Bearer {access_token}',
@@ -621,19 +639,30 @@ def create_subtask(parent_task_id, subtask_data, responsible_ids, access_token):
             "start": subtask_data.get("start_date"),
             "due": subtask_data.get("end_date")
         }
+        # Get custom fields from API specific to the space
+    custom_fields = get_custom_fields_by_space(access_token, space_id)
 
-    # Add custom fields dynamically
+    # Map Excel headings to Wrike custom fields
+    mapped_custom_fields = map_excel_headings_to_custom_fields(subtask_data.keys(), custom_fields)
+    print(f"[DEBUG] Mapped Custom Fields: {mapped_custom_fields}")
+
+    # Create custom fields payload
     custom_fields_payload = []
-    for field_name, field_value in task_data.items():
-        if field_name in custom_fields and pd.notna(field_value):
+    for field_name, field_id in mapped_custom_fields.items():
+        field_value = subtask_data.get(field_name) 
+        print(f"[DEBUG] Retrieving '{field_name}' from task data: '{field_value}'") 
+        
+        if pd.notna(field_value):
             custom_fields_payload.append({
-                "id": custom_fields[field_name],
-                "value": str(field_value)  # Wrike requires custom field values to be strings
+                "id": field_id,
+                "value": str(field_value)  # Wrike expects the custom field values as strings
             })
     
     if custom_fields_payload:
         payload["customFields"] = custom_fields_payload
-   
+
+    # Debugging print statement to see the final payload
+    print("Final payload being sent:", payload)   
     response = requests.post(endpoint, headers=headers, json=payload)
 
     if response.status_code == 200:
