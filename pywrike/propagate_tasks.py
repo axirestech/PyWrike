@@ -170,26 +170,80 @@ def get_task_id_by_title(folder_id, task_title, access_token):
     print(f"Task with title '{task_title}' not found.")
     return None
 
-# Function to update a task with new parent IDs
-def update_task_with_parent_id(task_id, parent_ids, access_token):
+def create_task(folder_id, task_data, access_token):
+    url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+    
+    task_dates = task_data.get('dates', {})
+    start_date = task_dates.get('start', "")
+    due_date = task_dates.get('due', "")
+    type_date = task_dates.get('type', "")
+    duration_date = task_dates.get("duration", "")
+        
+    dates = {}
+    if start_date:
+        dates["start"] = start_date
+    if due_date:
+        dates["due"] = due_date
+    if type_date:
+        dates["type"] = type_date
+    if duration_date:
+        dates["duration"] = duration_date
+  
+    effortAllocation = task_data.get('effortAllocation', {})
+    
+    effort_allocation_payload = {}
+    if effortAllocation.get('mode') in ['Basic', 'Flexible', 'None', 'FullTime']:  # Check valid modes
+        effort_allocation_payload['mode'] = effortAllocation.get('mode')
+        if 'totalEffort' in effortAllocation:
+            effort_allocation_payload['totalEffort'] = effortAllocation['totalEffort']
+        if 'allocatedEffort' in effortAllocation:
+            effort_allocation_payload['allocatedEffort'] = effortAllocation['allocatedEffort']
+        if 'dailyAllocationPercentage' in effortAllocation:
+            effort_allocation_payload['dailyAllocationPercentage'] = effortAllocation['dailyAllocationPercentage']
+
+    payload = {
+        "title": task_data.get("title", ""),
+        "description": task_data.get("description", ""),
+        "responsibles": task_data.get("responsibleIds", []),        
+        "customStatus": task_data.get("customStatusId", ""),
+        "importance": task_data.get("importance", ""),
+        "metadata": task_data.get("metadata", []),
+        "customFields": task_data.get("customFields", []) 
+    }
+    
+    if dates:
+        payload["dates"] = dates
+    
+    if effortAllocation:
+        payload["effortAllocation"] = effort_allocation_payload
+            
+    response = requests.post(url, headers=headers, json=payload)
+        
+    response.raise_for_status()
+    return response.json()['data']
+
+# Function to get task details by task ID
+def get_task_details(task_id, access_token):
     endpoint = f'https://www.wrike.com/api/v4/tasks/{task_id}'
     headers = {
         'Authorization': f'Bearer {access_token}',
         'Content-Type': 'application/json'
     }
-    data = {
-        'addParents': parent_ids
-    }
 
-    response = requests.put(endpoint, headers=headers, json=data)
-    if response.status_code == 200:
-        print(f"Task '{task_id}' updated successfully with new parent IDs: {parent_ids}")
-    else:
-        print(f"Failed to update task '{task_id}'. Status code: {response.status_code}")
+    response = requests.get(endpoint, headers=headers)
+    if response.status_code != 200:
+        print(f"Failed to retrieve task details. Status code: {response.status_code}")
         print(response.text)
+        return None
 
+    task = response.json().get('data', [])[0]
+    return task
 
-# Main function to handle reading from Excel and updating tasks
+# Modified main function to create new tasks instead of updating existing ones
 def propagate_tasks_main():
     # Ask the user to input the path of the Excel file
     excel_file = input("Please enter the full path to the Excel file: ")
@@ -229,44 +283,27 @@ def propagate_tasks_main():
         if not source_folder_id:
             continue
 
-        # Extract the latest subfolder from the source path
-        source_subfolder_name = source_path.split('\\')[-1]
-
         # Get the destination folder ID
         destination_folder_id = get_folder_id_by_path(destination_path, space_id, access_token)
         if not destination_folder_id:
             # Create the destination folder if it doesn't exist
-            destination_folder_name = destination_path.split('\\')[-1]  # Get the last part of the path as folder name
-            parent_folder_id = get_folder_id_by_path('\\'.join(destination_path.split('\\')[:-1]), space_id, access_token)  # Get the parent folder's path
-
+            destination_folder_name = destination_path.split('\\')[-1]
+            parent_folder_id = get_folder_id_by_path('\\'.join(destination_path.split('\\')[:-1]), space_id, access_token)
             if not parent_folder_id:
                 print(f"Parent folder for '{destination_folder_name}' not found. Skipping.")
                 continue
-
             destination_folder_id = create_folder_in_space(destination_folder_name, parent_folder_id, access_token)
 
-        # If the task title is empty, replicate the folder structure
         if pd.isna(task_title):
-            # Create the subfolder under the destination path
-            new_subfolder_id = create_folder_in_space(source_subfolder_name, destination_folder_id, access_token)
-
-            if not new_subfolder_id:
-                print(f"Failed to create subfolder '{source_subfolder_name}' in destination '{destination_path}'.")
-                continue
-
-            # Copy all tasks from the source subfolder to the newly created subfolder
+            # Create subfolder and replicate the tasks
+            new_subfolder_id = create_folder_in_space(source_path.split('\\')[-1], destination_folder_id, access_token)
             tasks = get_all_tasks_in_folder(source_folder_id, access_token)
             for task in tasks:
-                update_task_with_parent_id(task['id'], [new_subfolder_id], access_token)
-                print(f"Task '{task['id']}' updated successfully with new parent ID: '{new_subfolder_id}'")
-
+                create_task(new_subfolder_id, task, access_token)  # Pass the new subfolder ID here
+                
         else:
-            # Update the specified task
+            # Create a new task instead of updating an existing one
             task_id = get_task_id_by_title(source_folder_id, task_title, access_token)
             if task_id:
-                update_task_with_parent_id(task_id, [destination_folder_id], access_token)
-                print(f"Task '{task_id}' updated successfully with new parent ID: '{destination_folder_id}'")
-
-# Call the main function
-if __name__ == '__propagate_tasks_main__':
-    propagate_tasks_main()
+                task_details = get_task_details(task_id, access_token)
+                create_task(destination_folder_id, task_details, access_token)  
