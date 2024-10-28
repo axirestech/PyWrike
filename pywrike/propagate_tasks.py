@@ -160,6 +160,7 @@ def get_all_tasks_in_folder(folder_id, access_token):
 
     tasks = response.json().get('data', [])
     return tasks
+    
 
 # Function to get the ID of a task by its title in a folder
 def get_task_id_by_title(folder_id, task_title, access_token):
@@ -243,7 +244,6 @@ def get_task_details(task_id, access_token):
     task = response.json().get('data', [])[0]
     return task
 
-# Modified main function to create new tasks instead of updating existing ones
 def propagate_tasks_main():
     # Ask the user to input the path of the Excel file
     excel_file = input("Please enter the full path to the Excel file: ")
@@ -258,15 +258,16 @@ def propagate_tasks_main():
         wrike = OAuth2Gateway1(excel_filepath=excel_file)
         access_token = wrike._create_auth_info()  # Perform OAuth2 authentication
         print(f"New access token obtained: {access_token}")
-        
-    # Load the propagation details from the file (assuming 'Space Name', 'Source Path', 'Task Title', 'Destination Path' columns)
+
+    # Load the propagation details from the file
     propagate_df = pd.read_excel(excel_file, sheet_name='Propagate')
 
     # Iterate over the rows in the 'Propagate' sheet
     for index, row in propagate_df.iterrows():
-        space_name = row['Space Name']
+        source_space_name = row['Space Name']
         source_path = row['Source Path']
         task_title = row['Task Title']
+        dest_space_name = row["Destination Space Name"]
 
         # Check if 'Destination Path' is valid (non-NaN)
         if pd.isna(row['Destination Path']):
@@ -274,23 +275,28 @@ def propagate_tasks_main():
             continue
 
         destination_path = row['Destination Path'].strip()
-
-        # Get the space ID by space name
-        space_id = get_space_id_by_name(space_name, access_token)
         
-        # Get the ID of the source folder
-        source_folder_id = get_folder_id_by_path(source_path, space_id, access_token)
+        # Check for destination space in the Destination Path
+        dest_space_name = row.get('Destination Space Name', source_space_name)  # Use the same space if no destination space provided
+        
+        # Get the space IDs for both source and destination spaces
+        source_space_id = get_space_id_by_name(source_space_name, access_token)
+        dest_space_id = get_space_id_by_name(dest_space_name, access_token)
+        
+        # Retrieve the source folder ID
+        source_folder_id = get_folder_id_by_path(source_path, source_space_id, access_token)
         if not source_folder_id:
             continue
 
-        # Get the destination folder ID
-        destination_folder_id = get_folder_id_by_path(destination_path, space_id, access_token)
+        # Retrieve or create the destination folder in the destination space
+        destination_folder_id = get_folder_id_by_path(destination_path, dest_space_id, access_token)
         if not destination_folder_id:
             # Create the destination folder if it doesn't exist
             destination_folder_name = destination_path.split('\\')[-1]
-            parent_folder_id = get_folder_id_by_path('\\'.join(destination_path.split('\\')[:-1]), space_id, access_token)
+            parent_folder_path = '\\'.join(destination_path.split('\\')[:-1])
+            parent_folder_id = get_folder_id_by_path(parent_folder_path, dest_space_id, access_token)
             if not parent_folder_id:
-                print(f"Parent folder for '{destination_folder_name}' not found. Skipping.")
+                print(f"Parent folder for '{destination_folder_name}' not found in destination space. Skipping.")
                 continue
             destination_folder_id = create_folder_in_space(destination_folder_name, parent_folder_id, access_token)
 
@@ -299,14 +305,21 @@ def propagate_tasks_main():
             new_subfolder_id = create_folder_in_space(source_path.split('\\')[-1], destination_folder_id, access_token)
             tasks = get_all_tasks_in_folder(source_folder_id, access_token)
             for task in tasks:
-                create_task(new_subfolder_id, task, access_token)  # Pass the new subfolder ID here
+                task_id = task['id']
                 
+                # Retrieve full details for the task
+                task_details = get_task_details(task_id, access_token)
+                
+                # Create the task in the new subfolder with all details
+                create_task(new_subfolder_id, task_details, access_token)
+
         else:
             # Create a new task instead of updating an existing one
             task_id = get_task_id_by_title(source_folder_id, task_title, access_token)
             if task_id:
                 task_details = get_task_details(task_id, access_token)
-                create_task(destination_folder_id, task_details, access_token)  
+                create_task(destination_folder_id, task_details, access_token)
+
                 
 
 

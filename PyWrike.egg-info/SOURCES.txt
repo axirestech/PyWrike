@@ -1,0 +1,17 @@
+README.md
+setup.py
+PyWrike/__init__.py
+PyWrike/api_calls.py
+PyWrike/create_delete_folders.py
+PyWrike/create_update_tasks.py
+PyWrike/new_space.py
+PyWrike/propagate_tasks.py
+PyWrike/wrike_export.py
+PyWrike.egg-info/PKG-INFO
+PyWrike.egg-info/SOURCES.txt
+PyWrike.egg-info/dependency_links.txt
+PyWrike.egg-info/requires.txt
+PyWrike.egg-info/top_level.txt
+PyWrike/gateways/__init__.py
+PyWrike/gateways/basegateway1.py
+PyWrike/gateways/oauth2gateway1.py

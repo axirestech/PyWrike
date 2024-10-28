@@ -1,0 +1,19 @@
+Metadata-Version: 2.1
+Name: PyWrike
+Version: 1.0
+Summary: A Python package to make API calls to Wrike
+Home-page: https://github.com/axirestech/PyWrike
+Download-URL: https://github.com/axirestech/PyWrike/archive/refs/tags/v1.0.tar.gz
+Author: Ambareen Jawaheer
+Author-email: ambareenjawaheer@gmail.com
+Keywords: api,gateway,wrike,http,REST
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Dist: requests>=2.0
+Requires-Dist: openpyxl>=3.0
+Requires-Dist: beautifulsoup4>=4.9
+Requires-Dist: pandas>=1.0
+Requires-Dist: Flask>=2.0
