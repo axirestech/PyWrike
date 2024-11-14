@@ -1454,3 +1454,42 @@ def create_custom_field_mapping(custom_fields):
 def save_to_json(data, filename='workspace_data.json'):
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
+
+# Function to create a folder by its path within a specific space
+def create_folder_by_path(folder_path, space_id, access_token):
+    folder_names = folder_path.split('\\')
+    parent_folder_id = get_folder_id_by_name(space_id, folder_names[0], access_token)
+
+    # If the parent folder does not exist, create it
+    if not parent_folder_id:
+        parent_folder_id = create_folders(space_id, folder_names[0], access_token)
+        if not parent_folder_id:
+            print(f"Failed to create the parent folder '{folder_names[0]}' in space '{space_id}'")
+            return None
+
+    # Iterate over the subfolders and create them if necessary
+    for folder_name in folder_names[1:]:
+        parent_folder_id = get_or_create_subfolder(parent_folder_id, folder_name, access_token)
+        if not parent_folder_id:
+            print(f"Failed to create or find subfolder '{folder_name}' in space '{space_id}'")
+            return None
+
+    return parent_folder_id
+
+# Helper function to create a folder in a space
+def create_folders(space_id, folder_name, access_token):
+    url = f"https://www.wrike.com/api/v4/folders"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "title": folder_name,
+        "spaceId": space_id
+    }
+    response = requests.post(url, headers=headers, json=data)
+    if response.status_code == 201:
+        return response.json().get("data", {}).get("id")
+    else:
+        print(f"Error creating folder '{folder_name}': {response.text}")
+        return None
