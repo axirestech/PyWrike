@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-CURRENT_VERSION = '1.1'
+CURRENT_VERSION = '1.2'
 
 setup(
     name='PyWrike',
