@@ -68,7 +68,9 @@ from .wrike import (
     get_custom_statuses,
     create_custom_status_mapping,
     create_custom_field_mapping,
-    save_to_json    
+    save_to_json,
+    create_folder_by_path,
+    create_folders    
 )
 
 # Optionally, you can define `__all__` to control what gets imported with a wildcard (*) import
@@ -140,6 +142,8 @@ __all__ = [
     "get_custom_statuses",
     "create_custom_status_mapping",
     "create_custom_field_mapping",
-    "save_to_json"
+    "save_to_json",
+    "create_folder_by_path",
+    "create_folders"  
 ]
 
