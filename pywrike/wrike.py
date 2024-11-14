@@ -4,7 +4,7 @@ import time
 import openpyxl
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
-from bs4 import BeautifulSoupw
+from bs4 import BeautifulSoup
 import pandas as pd
 import os
 from PyWrike.gateways import OAuth2Gateway1
