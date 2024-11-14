@@ -7,14 +7,49 @@ import socketserver
 import http.server
 import re
 
-class OAuth2CodeServer(http.server.BaseHTTPRequestHandler):
-    # Server setup remains as-is
+class OAuth2CodeServer(BaseHTTPServer.BaseHTTPRequestHandler):
+  def __init__(self, *args):
+    self.code = None
+    BaseHTTPServer.BaseHTTPRequestHandler.__init__(self, *args)
 
-class QuickSocketServer(socketserver.TCPServer):
-    # Socket server setup remains as-is
+  def do_GET(self):
+    match = re.search('code=([\w|\-]+)', self.path)
+    if match is not None:
+      self.server.authentication_code = match.group(1)
+      while self.server.wait_for_redirect and self.server.redirect is None: pass
+      if self.server.wait_for_redirect:
+        self.send_response(301)
+        self.send_header('Location', self.server.redirect)
+        self.end_headers()
+      else:
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write("Thank you, you can now close this window.")
+
+    else:
+      self.server.authentication_code = 0
+      self.send_response(406)
+      self.end_headers()
+
+class QuickSocketServer(SocketServer.TCPServer):
+  def __init__(self, wait_for_redirect=False):
+    self.authentication_code = None
+    self.redirect = None
+    self.wait_for_redirect = wait_for_redirect
+    SocketServer.TCPServer.__init__(self, ("", 19877), OAuth2CodeServer)
+
+  def server_bind(self):
+    self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    self.socket.bind(self.server_address)
 
 class ServerThread(threading.Thread):
-    # Thread setup remains as-is
+  def __init__(self, httpd, **args):
+    self._httpd = httpd
+    threading.Thread.__init__(self, **args)
+
+  def run(self):
+    self._httpd.handle_request()
+
 
 class OAuth2Gateway1(APIGateway):
     def __init__(self, client_id=None, client_secret=None, redirect_uri=None, tokens_updater=None, wait_for_redirect=False):
