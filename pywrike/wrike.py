@@ -949,7 +949,7 @@ def create_or_update_task(new_folder_id, task_data, task_map, access_token, fold
 
     else:
         # Create the task or subtask
-        created_task = create_task(
+        created_task = create_tasks(
             new_folder_id=new_folder_id if not is_subtask else None,
             task_data=task_data,
             super_task_id=super_task_id,
