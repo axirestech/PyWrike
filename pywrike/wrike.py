@@ -149,7 +149,7 @@ def delete_wrike_project(access_token, parent_folder_id, project_title):
 # Function to get the ID of a folder by its path within a specific space
 def get_folder_id_by_path(folder_path, space_id, access_token):
     folder_names = folder_path.split('\\')
-    parent_folder_id = get_folder_id_by_name(space_id, folder_names[0], access_token)
+    parent_folder_id = get_folder_id_in_space_by_name(space_id, folder_names[0], access_token)
     if not parent_folder_id:
         return None
 
