@@ -546,8 +546,7 @@ def update_subtask_with_parent(subtask_id, new_parent_task_id, access_token):
         print(f"Failed to update subtask '{subtask_data['title']}'. Status code: {response.status_code}")
         print(response.text)
 
-def create_task_in_folder(folder_id, space_id, task_data, access_token):
-    global cached_tasks  # Use the global variable for caching tasks
+def create_task_in_folder(folder_id, space_id, task_data, access_token, cached_tasks):
     print(f"[DEBUG] Starting to create/update task '{task_data['title']}' in folder '{folder_id}' within space '{space_id}'.")
 
     responsible_ids = []
@@ -614,8 +613,7 @@ def get_subtasks_by_task_id(parent_task_id, access_token):
         print(f"Failed to retrieve subtasks for parent task '{parent_task_id}': {e}")
         return []
 
-def create_subtask_in_parent_task(parent_task_id, space_id, subtask_data, access_token):
-    global cached_tasks  # Use the global cache for tasks and subtasks
+def create_subtask_in_parent_task(parent_task_id, space_id, subtask_data, access_token, cached_tasks):
     print(f"[DEBUG] Starting to create/update subtask '{subtask_data['title']}' under parent task '{parent_task_id}' within space '{space_id}'.")
 
     responsible_ids = []
