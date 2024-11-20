@@ -1224,7 +1224,7 @@ def get_task_id_by_titles(folder_id, task_title, access_token):
     print(f"Task with title '{task_title}' not found.")
     return None
 
-def create_task_folder(folder_id, task_data, access_token):
+def create_task_folder(folder_id, task_data, access_token, mapped_custom_fields=None):
     url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks'
     headers = {
         'Authorization': f'Bearer {access_token}',
@@ -1266,7 +1266,7 @@ def create_task_folder(folder_id, task_data, access_token):
         "customStatus": task_data.get("customStatusId", ""),
         "importance": task_data.get("importance", ""),
         "metadata": task_data.get("metadata", []),
-        "customFields": task_data.get("customFields", []) 
+        "customFields": mapped_custom_fields or []  
     }
     
     if dates:
