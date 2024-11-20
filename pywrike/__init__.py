@@ -70,7 +70,8 @@ from .wrike import (
     create_custom_field_mapping,
     save_to_json,
     create_folder_by_path,
-    create_folders    
+    create_folders,
+    map_custom_fields_propagate
 )
 
 # Optionally, you can define `__all__` to control what gets imported with a wildcard (*) import
@@ -144,6 +145,7 @@ __all__ = [
     "create_custom_field_mapping",
     "save_to_json",
     "create_folder_by_path",
-    "create_folders"  
+    "create_folders",
+    "map_custom_fields_propagate"
 ]
 
