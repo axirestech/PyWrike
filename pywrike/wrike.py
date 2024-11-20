@@ -826,6 +826,40 @@ def map_custom_fields(original_fields, original_space_id, new_space_id, access_t
 
     return field_mapping
 
+def map_custom_fields_propagate(original_fields, original_space_id, new_space_id, access_token):
+    field_mapping = {}
+
+    # Step 1: Retrieve all custom fields in the destination space
+    destination_fields = get_custom_fields(access_token)
+    dest_space_fields = [
+        field for field in destination_fields
+        if field.get('spaceId') == new_space_id
+    ]
+
+    for field in original_fields:
+        # Check if the field belongs to the original space
+        if field.get('spaceId') != original_space_id:
+            continue
+
+        # Check if the field already exists in the destination space
+        existing_field = next(
+            (dest_field for dest_field in dest_space_fields if dest_field['title'] == field['title']),
+            None
+        )
+
+        if existing_field:
+            print(f"Custom field '{field['title']}' already exists in the destination space. Mapping directly.")
+            field_mapping[field['id']] = existing_field['id']
+        else:
+            print(f"Creating new custom field: {field['title']}")
+            # Create the custom field in the destination space
+            new_field = create_custom_field(field, new_space_id, access_token)
+            field_mapping[field['id']] = new_field['id']
+            print(f"Mapped Custom Field: {field['title']} -> New Field ID: {new_field['id']}")
+
+    return field_mapping
+
+
 # Function to get folders in a space
 def get_folders_in_space(space_id, access_token):
     url = f'https://www.wrike.com/api/v4/spaces/{space_id}/folders'
@@ -1258,6 +1292,7 @@ def create_task_folder(folder_id, task_data, access_token, mapped_custom_fields=
             effort_allocation_payload['allocatedEffort'] = effortAllocation['allocatedEffort']
         if 'dailyAllocationPercentage' in effortAllocation:
             effort_allocation_payload['dailyAllocationPercentage'] = effortAllocation['dailyAllocationPercentage']
+    
     
     payload = {
         "title": task_data.get("title", ""),
