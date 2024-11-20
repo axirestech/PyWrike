@@ -1258,6 +1258,16 @@ def create_task_folder(folder_id, task_data, access_token, mapped_custom_fields=
             effort_allocation_payload['allocatedEffort'] = effortAllocation['allocatedEffort']
         if 'dailyAllocationPercentage' in effortAllocation:
             effort_allocation_payload['dailyAllocationPercentage'] = effortAllocation['dailyAllocationPercentage']
+    
+    # Map custom fields for the task
+    mapped_custom_fields = []
+    for field in task_data.get('customFields', []):
+        field_id = field['id']
+        if field_id in custom_field_mapping:
+            mapped_custom_fields.append({
+                'id': custom_field_mapping[field_id],
+                'value': field['value']
+            })
 
     payload = {
         "title": task_data.get("title", ""),
