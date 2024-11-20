@@ -1432,7 +1432,7 @@ def clean_html(raw_html):
     return "\n".join(lines)
 
 # Function to get user details by ID
-def get_user_details(user_id, access_token):
+def get_user_details(user_id, access_token, user_cache):
     if user_id in user_cache:
         return user_cache[user_id]
     
