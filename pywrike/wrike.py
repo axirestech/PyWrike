@@ -420,10 +420,10 @@ def create_task(folder_id, space_id, task_data, responsible_ids, access_token):
         payload["description"] = task_data["description"]
     
     if pd.notna(task_data.get("start_date")) and pd.notna(task_data.get("end_date")):
-    payload["dates"] = {
-        "start": task_data.get("start_date").isoformat() if isinstance(task_data.get("start_date"), pd.Timestamp) else task_data.get("start_date"),
-        "due": task_data.get("end_date").isoformat() if isinstance(task_data.get("end_date"), pd.Timestamp) else task_data.get("end_date")
-    }
+        payload["dates"] = {
+            "start": task_data.get("start_date").isoformat() if isinstance(task_data.get("start_date"), pd.Timestamp) else task_data.get("start_date"),
+            "due": task_data.get("end_date").isoformat() if isinstance(task_data.get("end_date"), pd.Timestamp) else task_data.get("end_date")
+        }
 
 
     # Get custom fields from API specific to the space
@@ -698,10 +698,10 @@ def create_subtask(parent_task_id, space_id, subtask_data, responsible_ids, acce
         payload["description"] = subtask_data["description"]
 
     if pd.notna(subtask_data.get("start_date")) and pd.notna(subtask_data.get("end_date")):
-    payload["dates"] = {
-        "start": subtask_data.get("start_date").isoformat() if isinstance(subtask_data.get("start_date"), pd.Timestamp) else subtask_data.get("start_date"),
-        "due": subtask_data.get("end_date").isoformat() if isinstance(subtask_data.get("end_date"), pd.Timestamp) else subtask_data.get("end_date")
-    }
+        payload["dates"] = {
+            "start": subtask_data.get("start_date").isoformat() if isinstance(subtask_data.get("start_date"), pd.Timestamp) else subtask_data.get("start_date"),
+            "due": subtask_data.get("end_date").isoformat() if isinstance(subtask_data.get("end_date"), pd.Timestamp) else subtask_data.get("end_date")
+        }
 
         # Get custom fields from API specific to the space
     custom_fields = get_custom_fields_by_space(access_token, space_id)
