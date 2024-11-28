@@ -1559,7 +1559,7 @@ def create_folders(space_id, folder_name, access_token):
 
 # Function to create a folder or project
 def create_folder_or_project(title, parent_id, api_token, project_details=None):
-    url = f'{BASE_URL}/folders/{parent_id}/folders'
+    url = f'https://www.wrike.com/api/v4/folders/{parent_id}/folders'
     headers = {
         'Authorization': f'Bearer {api_token}',
         'Content-Type': 'application/json'
