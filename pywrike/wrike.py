@@ -1035,7 +1035,8 @@ def create_folders_recursively(paths, root_folder_id, original_space_name, new_s
         for part in path_parts:
             if part not in folder_id_map:
                 # Check if the current folder is a project
-                folder_data = next((f for f in folders if f['path'] == f"{original_space_name}/{folder_path}"), None)
+                folder_data = next((f for f in folders if f.get('path') == f"{original_space_name}/{folder_path}"),None)
+
                 project_details = folder_data.get('project') if folder_data else None
 
                 # Create the folder or project
