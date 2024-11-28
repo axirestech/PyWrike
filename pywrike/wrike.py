@@ -1001,7 +1001,7 @@ def create_or_update_task(new_folder_id, task_data, task_map, access_token, fold
         return created_task
 
 # Function to create folders recursively, updating the folder_mapping with original-new folder relationships
-def create_folders_recursively(paths, root_folder_id, original_space_name, new_space_name, access_token, folders, custom_field_mapping):
+def create_folders_recursively(paths, root_folder_id, original_space_name, new_space_name, api_token, folders, custom_field_mapping):
     folder_id_map = {}
     folder_mapping = {}
     new_paths_info = []
@@ -1010,23 +1010,42 @@ def create_folders_recursively(paths, root_folder_id, original_space_name, new_s
     for path in paths:
         folder_path = path['path']
 
-        # If the folder_path matches the original space name, skip folder creation but handle tasks
+        # Skip folder creation for the root space but handle its tasks
         if folder_path == original_space_name:
-            # Process tasks in the root space
-            root_tasks = get_tasks_in_folder(path['id'], access_token)
+            root_tasks = get_tasks_in_folder(path['id'], api_token)
             for task in root_tasks:
-                create_or_update_task(new_folder_id=root_folder_id, task_data=task, task_map=task_map, access_token=access_token, folders=folders, folder_mapping=folder_mapping, custom_field_mapping=custom_field_mapping)
+                create_or_update_task(
+                    new_folder_id=root_folder_id,
+                    task_data=task,
+                    task_map=task_map,
+                    api_token=api_token,
+                    folders=folders,
+                    folder_mapping=folder_mapping,
+                    custom_field_mapping=custom_field_mapping
+                )
             continue
 
-        # If the folder_path is a subfolder, continue with the usual process
+        # Adjust folder_path for subfolders
         if folder_path.startswith(original_space_name + '/'):
             folder_path = folder_path[len(original_space_name) + 1:]
 
         path_parts = folder_path.strip('/').split('/')
         parent_id = root_folder_id
+
         for part in path_parts:
             if part not in folder_id_map:
-                new_folder_id = create_folder(part, parent_id, access_token)
+                # Check if the current folder is a project
+                folder_data = next((f for f in folders if f['path'] == f"{original_space_name}/{folder_path}"), None)
+                project_details = folder_data.get('project') if folder_data else None
+
+                # Create the folder or project
+                new_folder_id = create_folder_or_project(
+                    title=part,
+                    parent_id=parent_id,
+                    api_token=api_token,
+                    project_details=project_details
+                )
+
                 folder_id_map[part] = new_folder_id
                 new_path = f"{new_space_name}/{'/'.join(path_parts[:path_parts.index(part)+1])}"
                 new_paths_info.append({
@@ -1040,9 +1059,17 @@ def create_folders_recursively(paths, root_folder_id, original_space_name, new_s
             parent_id = folder_id_map[part]
 
         # Process tasks in the current folder
-        folder_tasks = get_tasks_in_folder(path['id'], access_token)
+        folder_tasks = get_tasks_in_folder(path['id'], api_token)
         for task in folder_tasks:
-            create_or_update_task(new_folder_id=parent_id, task_data=task, task_map=task_map, access_token=access_token, folders=folders, folder_mapping=folder_mapping, custom_field_mapping=custom_field_mapping)
+            create_or_update_task(
+                new_folder_id=parent_id,
+                task_data=task,
+                task_map=task_map,
+                api_token=api_token,
+                folders=folders,
+                folder_mapping=folder_mapping,
+                custom_field_mapping=custom_field_mapping
+            )
 
     return new_paths_info
 
@@ -1528,3 +1555,31 @@ def create_folders(space_id, folder_name, access_token):
     else:
         print(f"Error creating folder '{folder_name}': {response.text}")
         return None
+
+# Function to create a folder or project
+def create_folder_or_project(title, parent_id, api_token, project_details=None):
+    url = f'{BASE_URL}/folders/{parent_id}/folders'
+    headers = {
+        'Authorization': f'Bearer {api_token}',
+        'Content-Type': 'application/json'
+    }
+    
+    # Common payload for folders
+    payload = {
+        'title': title,
+        'shareds': []
+    }
+    
+    # Add project-specific details if it is a project
+    if project_details:
+        payload['project'] = {
+            'authorId': project_details.get('authorId'),
+            'ownerIds': project_details.get('ownerIds', []),
+            'customStatusId': project_details.get('customStatusId'),
+            'createdDate': project_details.get('createdDate')
+        }
+
+    response = requests.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+    
+    return response.json()['data'][0]['id']
