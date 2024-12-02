@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import os
 from PyWrike.gateways import OAuth2Gateway1
+import numpy as np
 
 # Function to validate the access token
 def validate_token(access_token):
@@ -62,19 +63,24 @@ def get_folder_id_by_name(folder_name, access_token):
     return None
 
 # Function to create a new project in Wrike
-def create_wrike_project(access_token, parent_folder_id, project_title):
+def create_wrike_project(access_token, parent_folder_id, project_title, responsible_id, start_date, end_date):
+    if not all([project_title, responsible_id, start_date, end_date]):
+        print("Missing required project details.")
+        return None
+
     endpoint = f'https://www.wrike.com/api/v4/folders/{parent_folder_id}/folders'
-    headers = {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json'
-    }
+    headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
 
     data = {
         'title': project_title,
+        'project': {
+            'ownerIds': [responsible_id],
+            'startDate': start_date,
+            'endDate': end_date
+        }
     }
 
     response = requests.post(endpoint, headers=headers, json=data)
-
     if response.status_code == 200:
         project_id = response.json()['data'][0]['id']
         print(f"Project '{project_title}' created successfully with ID: {project_id}!")
@@ -1001,7 +1007,7 @@ def create_or_update_task(new_folder_id, task_data, task_map, access_token, fold
         return created_task
 
 # Function to create folders recursively, updating the folder_mapping with original-new folder relationships
-def create_folders_recursively(paths, root_folder_id, original_space_name, new_space_name, api_token, folders, custom_field_mapping):
+def create_folders_recursively(paths, root_folder_id, original_space_name, new_space_name, access_token, folders, custom_field_mapping):
     folder_id_map = {}
     folder_mapping = {}
     new_paths_info = []
@@ -1012,13 +1018,13 @@ def create_folders_recursively(paths, root_folder_id, original_space_name, new_s
 
         # Skip folder creation for the root space but handle its tasks
         if folder_path == original_space_name:
-            root_tasks = get_tasks_in_folder(path['id'], api_token)
+            root_tasks = get_tasks_in_folder(path['id'], access_token)
             for task in root_tasks:
                 create_or_update_task(
                     new_folder_id=root_folder_id,
                     task_data=task,
                     task_map=task_map,
-                    api_token=api_token,
+                    access_token=access_token,
                     folders=folders,
                     folder_mapping=folder_mapping,
                     custom_field_mapping=custom_field_mapping
@@ -1035,7 +1041,7 @@ def create_folders_recursively(paths, root_folder_id, original_space_name, new_s
         for part in path_parts:
             if part not in folder_id_map:
                 # Check if the current folder is a project
-                folder_data = next((f for f in folders if f.get('path') == f"{original_space_name}/{folder_path}"),None)
+                folder_data = next((f for f in folders if f.get('title') == part), None)
 
                 project_details = folder_data.get('project') if folder_data else None
 
@@ -1043,7 +1049,7 @@ def create_folders_recursively(paths, root_folder_id, original_space_name, new_s
                 new_folder_id = create_folder_or_project(
                     title=part,
                     parent_id=parent_id,
-                    api_token=api_token,
+                    access_token=access_token,
                     project_details=project_details
                 )
 
@@ -1060,13 +1066,13 @@ def create_folders_recursively(paths, root_folder_id, original_space_name, new_s
             parent_id = folder_id_map[part]
 
         # Process tasks in the current folder
-        folder_tasks = get_tasks_in_folder(path['id'], api_token)
+        folder_tasks = get_tasks_in_folder(path['id'], access_token)
         for task in folder_tasks:
             create_or_update_task(
                 new_folder_id=parent_id,
                 task_data=task,
                 task_map=task_map,
-                api_token=api_token,
+                access_token=access_token,
                 folders=folders,
                 folder_mapping=folder_mapping,
                 custom_field_mapping=custom_field_mapping
@@ -1558,10 +1564,10 @@ def create_folders(space_id, folder_name, access_token):
         return None
 
 # Function to create a folder or project
-def create_folder_or_project(title, parent_id, api_token, project_details=None):
+def create_folder_or_project(title, parent_id, access_token, project_details=None):
     url = f'https://www.wrike.com/api/v4/folders/{parent_id}/folders'
     headers = {
-        'Authorization': f'Bearer {api_token}',
+        'Authorization': f'Bearer {access_token}',
         'Content-Type': 'application/json'
     }
     
@@ -1584,3 +1590,4 @@ def create_folder_or_project(title, parent_id, api_token, project_details=None):
     response.raise_for_status()
     
     return response.json()['data'][0]['id']
+
