@@ -317,12 +317,10 @@ def get_task_id_by_title(task_title, folder_id, access_token):
     return None
 
 # Function to lookup the responsible ID by first name, last name, and email
+# Function to lookup the responsible ID by first name, last name, and email
 def get_responsible_id_by_name_and_email(first_name, last_name, email, access_token):
-    endpoint = f'https://www.wrike.com/api/v4/contacts'
-    headers = {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json'
-    }
+    endpoint = 'https://www.wrike.com/api/v4/contacts'
+    headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
 
     response = requests.get(endpoint, headers=headers)
     if response.status_code != 200:
@@ -332,9 +330,15 @@ def get_responsible_id_by_name_and_email(first_name, last_name, email, access_to
 
     contacts = response.json().get('data', [])
     for contact in contacts:
-        if contact.get('firstName', '') == first_name and contact.get('lastName', '') == last_name and contact.get('profiles', [])[0].get('email', '') == email:
+        profiles = contact.get('profiles', [])
+        if (
+            contact.get('firstName', '') == first_name
+            and contact.get('lastName', '') == last_name
+            and any(profile.get('email', '') == email for profile in profiles)
+        ):
             return contact['id']
 
+    print(f"No contact found with name {first_name} {last_name} and email {email}.")
     return None
 
 def cache_subtasks_from_tasks(cached_tasks, access_token):
