@@ -1524,7 +1524,7 @@ def create_custom_field_mapping(custom_fields):
     return custom_field_mapping
 
 # Function to save data to JSON
-def save_to_json(data, filename='workspace_data.json'):
+def save_to_json(data, space_name):
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
 
@@ -1595,3 +1595,47 @@ def create_folder_or_project(title, parent_id, access_token, project_details=Non
     
     return response.json()['data'][0]['id']
 
+# Function to get details of subtasks
+def get_subtask_details(subtask_ids, access_token):
+    headers = {'Authorization': f'Bearer {access_token}'}
+    subtasks = []
+    for subtask_id in subtask_ids:
+        url = f'https://www.wrike.com/api/v4/tasks/{subtask_id}'
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            subtask_data = response.json()['data'][0]
+            subtasks.append(subtask_data)
+        else:
+            print(f"Failed to get subtask details for subtask {subtask_id}. Status Code: {response.status_code}")
+    return subtasks
+
+# Function to get tasks in a folder
+def get_tasks_in_folder_json(folder_id, access_token):
+    headers = {'Authorization': f'Bearer {access_token}'}
+    url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks?fields=["subTaskIds","effortAllocation","authorIds","customItemTypeId","responsibleIds","description","hasAttachments","dependencyIds","superParentIds","superTaskIds","metadata","customFields","parentIds","sharedIds","recurrent","briefDescription","attachmentCount"]'
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        tasks = response.json()['data']
+        for task in tasks:
+            if 'subTaskIds' in task and task['subTaskIds']:
+                task['subtasks'] = get_subtask_details(task['subTaskIds'], access_token)
+        return tasks
+    else:
+        print(f"Failed to get tasks for folder {folder_id}. Status Code: {response.status_code}")
+        return []
+
+# Function to get all folders in a workspace
+def get_all_folders_json(workspace_id, access_token):
+    headers = {'Authorization': f'Bearer {access_token}'}
+    url = f'https://www.wrike.com/api/v4/spaces/{workspace_id}/folders'
+    response = requests.get(url, headers=headers)
+    workspace_data = {'workspace_id': workspace_id, 'folders': []}
+    if response.status_code == 200:
+        folders = response.json()['data']
+        for folder in folders:
+            folder_data = folder
+            folder_data['tasks'] = get_tasks_in_folder(folder['id'], access_token)
+            workspace_data['folders'].append(folder_data)
+    else:
+        print(f"Failed to get folders for workspace {workspace_id}. Status Code: {response.status_code}")
+    return workspace_data
