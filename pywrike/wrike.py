@@ -1525,6 +1525,7 @@ def create_custom_field_mapping(custom_fields):
 
 # Function to save data to JSON
 def save_to_json(data, space_name):
+    filename = f"export_{space_name}.json"
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
 
