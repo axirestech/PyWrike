@@ -1640,3 +1640,135 @@ def get_all_folders_json(workspace_id, access_token):
     else:
         print(f"Failed to get folders for workspace {workspace_id}. Status Code: {response.status_code}")
     return workspace_data
+
+
+def create_task_folder_propagate(folder_id, task_data, access_token, mapped_custom_fields=None):
+    url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+    
+    task_dates = task_data.get('dates', {})
+    start_date = task_dates.get('start', "")
+    due_date = task_dates.get('due', "")
+    type_date = task_dates.get('type', "")
+    duration_date = task_dates.get("duration", "")
+        
+    dates = {}
+    if start_date:
+        dates["start"] = start_date
+    if due_date:
+        dates["due"] = due_date
+    if type_date:
+        dates["type"] = type_date
+    if duration_date:
+        dates["duration"] = duration_date
+  
+    effortAllocation = task_data.get('effortAllocation', {})
+    
+    effort_allocation_payload = {}
+    if effortAllocation.get('mode') in ['Basic', 'Flexible', 'None', 'FullTime']:  # Check valid modes
+        effort_allocation_payload['mode'] = effortAllocation.get('mode')
+        if 'totalEffort' in effortAllocation:
+            effort_allocation_payload['totalEffort'] = effortAllocation['totalEffort']
+        if 'allocatedEffort' in effortAllocation:
+            effort_allocation_payload['allocatedEffort'] = effortAllocation['allocatedEffort']
+        if 'dailyAllocationPercentage' in effortAllocation:
+            effort_allocation_payload['dailyAllocationPercentage'] = effortAllocation['dailyAllocationPercentage']
+    
+    
+    payload = {
+        "title": task_data.get("title", ""),
+        "description": task_data.get("description", ""),
+        "responsibles": task_data.get("responsibleIds", []),        
+        "customStatus": task_data.get("customStatusId", ""),
+        "importance": task_data.get("importance", ""),
+        "metadata": task_data.get("metadata", []),
+        "customFields": mapped_custom_fields or []  
+    }
+    
+    if dates:
+        payload["dates"] = dates
+    
+    if effortAllocation:
+        payload["effortAllocation"] = effort_allocation_payload
+            
+        # Create task
+    response = requests.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+    created_task = response.json()['data'][0]
+    parent_task_id = created_task['id']
+    
+    # Handle subtask creation
+    for sub_task_id in task_data.get('subTaskIds', []):
+        subtask_data = get_task_detail(sub_task_id, access_token)
+        create_subtask_propagate(parent_task_id, task_data.get('spaceId'), subtask_data, access_token, mapped_custom_fields)
+    
+    return created_task
+
+def create_subtask_propagate(parent_task_id, space_id, subtask_data, access_token, mapped_custom_fields=None):
+    endpoint = f'https://www.wrike.com/api/v4/tasks'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+  
+    subtask_dates = subtask_data.get('dates', {})
+    start_date = subtask_dates.get('start', "")
+    due_date = subtask_dates.get('due', "")
+    type_date = subtask_dates.get('type', "")
+    duration_date = subtask_dates.get("duration", "")
+        
+    dates = {}
+    if start_date:
+        dates["start"] = start_date
+    if due_date:
+        dates["due"] = due_date
+    if type_date:
+        dates["type"] = type_date
+    if duration_date:
+        dates["duration"] = duration_date
+  
+    effortAllocation = subtask_data.get('effortAllocation', {})
+    effort_allocation_payload = {}
+    if effortAllocation.get('mode') in ['Basic', 'Flexible', 'None', 'FullTime']:
+        effort_allocation_payload['mode'] = effortAllocation.get('mode')
+        if 'totalEffort' in effortAllocation:
+            effort_allocation_payload['totalEffort'] = effortAllocation['totalEffort']
+        if 'allocatedEffort' in effortAllocation:
+            effort_allocation_payload['allocatedEffort'] = effortAllocation['allocatedEffort']
+        if 'dailyAllocationPercentage' in effortAllocation:
+            effort_allocation_payload['dailyAllocationPercentage'] = effortAllocation['dailyAllocationPercentage']
+    
+    # Map and format custom fields for the subtask
+    custom_fields = []
+    for field in subtask_data.get("customFields", []):
+        if field['id'] in mapped_custom_fields:
+            mapped_field_id = mapped_custom_fields[field['id']]
+            custom_fields.append({
+                "id": mapped_field_id,
+                "value": field.get('value', '')  # Subtask-specific value
+            })  
+
+    payload = {
+        "title": subtask_data.get("title", ""),
+        "description": subtask_data.get("description", ""),
+        "superTasks": [parent_task_id],
+        "responsibles": subtask_data.get("responsibleIds", []),        
+        "customStatus": subtask_data.get("customStatusId", ""),
+        "importance": subtask_data.get("importance", ""),
+        "metadata": subtask_data.get("metadata", []),
+        "customFields": custom_fields  # Subtask-specific custom fields
+    }
+    
+    if dates:
+        payload["dates"] = dates
+    
+    if effortAllocation:
+        payload["effortAllocation"] = effort_allocation_payload
+    
+    # Create subtask
+    response = requests.post(endpoint, headers=headers, json=payload)
+    response.raise_for_status()
+    return response.json()['data'][0]
