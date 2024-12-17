@@ -1635,7 +1635,7 @@ def get_all_folders_json(workspace_id, access_token):
         folders = response.json()['data']
         for folder in folders:
             folder_data = folder
-            folder_data['tasks'] = get_tasks_in_folder(folder['id'], access_token)
+            folder_data['tasks'] = get_tasks_in_folder_json(folder['id'], access_token)
             workspace_data['folders'].append(folder_data)
     else:
         print(f"Failed to get folders for workspace {workspace_id}. Status Code: {response.status_code}")
