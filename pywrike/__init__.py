@@ -71,7 +71,13 @@ from .wrike import (
     save_to_json,
     create_folder_by_path,
     create_folders,
-    map_custom_fields_propagate
+    map_custom_fields_propagate,
+    get_all_folders_json,
+    get_tasks_in_folder_json,
+    get_subtask_details,
+    create_folder_or_project,
+    create_subtask_propagate,
+    create_task_folder_propagate
 )
 
 # Optionally, you can define `__all__` to control what gets imported with a wildcard (*) import
@@ -146,6 +152,12 @@ __all__ = [
     "save_to_json",
     "create_folder_by_path",
     "create_folders",
-    "map_custom_fields_propagate"
+    "map_custom_fields_propagate",
+    "get_all_folders_json",
+    "get_tasks_in_folder_json",
+    "get_subtask_details",
+    "create_folder_or_project",
+    "create_subtask_propagate",
+    "create_task_folder_propagate"
 ]
 

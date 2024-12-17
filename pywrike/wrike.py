@@ -1524,7 +1524,8 @@ def create_custom_field_mapping(custom_fields):
     return custom_field_mapping
 
 # Function to save data to JSON
-def save_to_json(data, filename='workspace_data.json'):
+def save_to_json(data, space_name):
+    filename = f"export_{space_name}.json"
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
 
@@ -1595,3 +1596,179 @@ def create_folder_or_project(title, parent_id, access_token, project_details=Non
     
     return response.json()['data'][0]['id']
 
+# Function to get details of subtasks
+def get_subtask_details(subtask_ids, access_token):
+    headers = {'Authorization': f'Bearer {access_token}'}
+    subtasks = []
+    for subtask_id in subtask_ids:
+        url = f'https://www.wrike.com/api/v4/tasks/{subtask_id}'
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            subtask_data = response.json()['data'][0]
+            subtasks.append(subtask_data)
+        else:
+            print(f"Failed to get subtask details for subtask {subtask_id}. Status Code: {response.status_code}")
+    return subtasks
+
+# Function to get tasks in a folder
+def get_tasks_in_folder_json(folder_id, access_token):
+    headers = {'Authorization': f'Bearer {access_token}'}
+    url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks?fields=["subTaskIds","effortAllocation","authorIds","customItemTypeId","responsibleIds","description","hasAttachments","dependencyIds","superParentIds","superTaskIds","metadata","customFields","parentIds","sharedIds","recurrent","briefDescription","attachmentCount"]'
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        tasks = response.json()['data']
+        for task in tasks:
+            if 'subTaskIds' in task and task['subTaskIds']:
+                task['subtasks'] = get_subtask_details(task['subTaskIds'], access_token)
+        return tasks
+    else:
+        print(f"Failed to get tasks for folder {folder_id}. Status Code: {response.status_code}")
+        return []
+
+# Function to get all folders in a workspace
+def get_all_folders_json(workspace_id, access_token):
+    headers = {'Authorization': f'Bearer {access_token}'}
+    url = f'https://www.wrike.com/api/v4/spaces/{workspace_id}/folders'
+    response = requests.get(url, headers=headers)
+    workspace_data = {'workspace_id': workspace_id, 'folders': []}
+    if response.status_code == 200:
+        folders = response.json()['data']
+        for folder in folders:
+            folder_data = folder
+            folder_data['tasks'] = get_tasks_in_folder(folder['id'], access_token)
+            workspace_data['folders'].append(folder_data)
+    else:
+        print(f"Failed to get folders for workspace {workspace_id}. Status Code: {response.status_code}")
+    return workspace_data
+
+
+def create_task_folder_propagate(folder_id, task_data, access_token, mapped_custom_fields=None):
+    url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+    
+    task_dates = task_data.get('dates', {})
+    start_date = task_dates.get('start', "")
+    due_date = task_dates.get('due', "")
+    type_date = task_dates.get('type', "")
+    duration_date = task_dates.get("duration", "")
+        
+    dates = {}
+    if start_date:
+        dates["start"] = start_date
+    if due_date:
+        dates["due"] = due_date
+    if type_date:
+        dates["type"] = type_date
+    if duration_date:
+        dates["duration"] = duration_date
+  
+    effortAllocation = task_data.get('effortAllocation', {})
+    
+    effort_allocation_payload = {}
+    if effortAllocation.get('mode') in ['Basic', 'Flexible', 'None', 'FullTime']:  # Check valid modes
+        effort_allocation_payload['mode'] = effortAllocation.get('mode')
+        if 'totalEffort' in effortAllocation:
+            effort_allocation_payload['totalEffort'] = effortAllocation['totalEffort']
+        if 'allocatedEffort' in effortAllocation:
+            effort_allocation_payload['allocatedEffort'] = effortAllocation['allocatedEffort']
+        if 'dailyAllocationPercentage' in effortAllocation:
+            effort_allocation_payload['dailyAllocationPercentage'] = effortAllocation['dailyAllocationPercentage']
+    
+    
+    payload = {
+        "title": task_data.get("title", ""),
+        "description": task_data.get("description", ""),
+        "responsibles": task_data.get("responsibleIds", []),        
+        "customStatus": task_data.get("customStatusId", ""),
+        "importance": task_data.get("importance", ""),
+        "metadata": task_data.get("metadata", []),
+        "customFields": mapped_custom_fields or []  
+    }
+    
+    if dates:
+        payload["dates"] = dates
+    
+    if effortAllocation:
+        payload["effortAllocation"] = effort_allocation_payload
+            
+        # Create task
+    response = requests.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+    created_task = response.json()['data'][0]
+    parent_task_id = created_task['id']
+    
+    # Handle subtask creation
+    for sub_task_id in task_data.get('subTaskIds', []):
+        subtask_data = get_task_detail(sub_task_id, access_token)
+        create_subtask_propagate(parent_task_id, task_data.get('spaceId'), subtask_data, access_token, mapped_custom_fields)
+    
+    return created_task
+
+def create_subtask_propagate(parent_task_id, space_id, subtask_data, access_token, mapped_custom_fields=None):
+    endpoint = f'https://www.wrike.com/api/v4/tasks'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+  
+    subtask_dates = subtask_data.get('dates', {})
+    start_date = subtask_dates.get('start', "")
+    due_date = subtask_dates.get('due', "")
+    type_date = subtask_dates.get('type', "")
+    duration_date = subtask_dates.get("duration", "")
+        
+    dates = {}
+    if start_date:
+        dates["start"] = start_date
+    if due_date:
+        dates["due"] = due_date
+    if type_date:
+        dates["type"] = type_date
+    if duration_date:
+        dates["duration"] = duration_date
+  
+    effortAllocation = subtask_data.get('effortAllocation', {})
+    effort_allocation_payload = {}
+    if effortAllocation.get('mode') in ['Basic', 'Flexible', 'None', 'FullTime']:
+        effort_allocation_payload['mode'] = effortAllocation.get('mode')
+        if 'totalEffort' in effortAllocation:
+            effort_allocation_payload['totalEffort'] = effortAllocation['totalEffort']
+        if 'allocatedEffort' in effortAllocation:
+            effort_allocation_payload['allocatedEffort'] = effortAllocation['allocatedEffort']
+        if 'dailyAllocationPercentage' in effortAllocation:
+            effort_allocation_payload['dailyAllocationPercentage'] = effortAllocation['dailyAllocationPercentage']
+    
+    # Map and format custom fields for the subtask
+    custom_fields = []
+    for field in subtask_data.get("customFields", []):
+        if field['id'] in mapped_custom_fields:
+            mapped_field_id = mapped_custom_fields[field['id']]
+            custom_fields.append({
+                "id": mapped_field_id,
+                "value": field.get('value', '')  # Subtask-specific value
+            })  
+
+    payload = {
+        "title": subtask_data.get("title", ""),
+        "description": subtask_data.get("description", ""),
+        "superTasks": [parent_task_id],
+        "responsibles": subtask_data.get("responsibleIds", []),        
+        "customStatus": subtask_data.get("customStatusId", ""),
+        "importance": subtask_data.get("importance", ""),
+        "metadata": subtask_data.get("metadata", []),
+        "customFields": custom_fields  # Subtask-specific custom fields
+    }
+    
+    if dates:
+        payload["dates"] = dates
+    
+    if effortAllocation:
+        payload["effortAllocation"] = effort_allocation_payload
+    
+    # Create subtask
+    response = requests.post(endpoint, headers=headers, json=payload)
+    response.raise_for_status()
+    return response.json()['data'][0]
