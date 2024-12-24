@@ -2019,7 +2019,7 @@ def process_space(space, access_token):
     print(f"Processing space: {space_title}")
 
     # Fetch all folders, tasks, custom fields, and workflows
-    workspace_data = get_all_folders(space_id, access_token)
+    workspace_data = get_all_folders_json(space_id, access_token)
     custom_fields = get_custom_fields_json(access_token, space_id)
     workflows = get_workflows(access_token)
 
@@ -2028,7 +2028,6 @@ def process_space(space, access_token):
     workspace_data["workflows"] = workflows
 
     # Save workspace data to JSON
-    filename = f'export_{space_title.replace(" ", "_")}.json'
     save_to_json(workspace_data, filename)
     print(f"Data for space '{space_title}' saved to {filename}")
 
