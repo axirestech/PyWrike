@@ -1837,7 +1837,7 @@ def process_subtasks(task_id, task_key, space_name, folder_path, parent_title, a
         print(f"Processing task {task_id} at depth {depth}")
 
         # Fetch task details
-        task_details = get_task_details(task_id, access_token, custom_status_mapping, custom_field_mapping)
+        task_details = get_tasks_details(task_id, access_token, custom_status_mapping, custom_field_mapping)
 
         # Extract task data
         task_dates = task_details.get("dates", {})
