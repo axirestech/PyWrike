@@ -2029,7 +2029,7 @@ def process_space(space, access_token):
      # Save workspace data to JSON
     save_to_json(workspace_data, space_title)
     
-    print(f"Data for space '{space_title}' saved to {filename}")
+    print(f"Data for space '{space_title}' saved")
 
 # Function to get details of subtasks recursively
 def get_subtask_details_json(subtask_ids, wrike_api_token):
