@@ -1914,7 +1914,7 @@ def process_subtasks(task_id, task_key, space_name, folder_path, parent_title, a
 # Updated function to filter custom fields
 def get_filtered_custom_fields(access_token, space_id=None):
     url = 'https://www.wrike.com/api/v4/customfields'
-    headers = create_headers(access_token)
+    headers = {'Authorization': f'Bearer {access_token}'}
     response = retry_request(url, headers=headers)
     print("Fetching and filtering custom fields...")
 
