@@ -1853,7 +1853,7 @@ def process_subtasks(task_id, task_key, space_name, folder_path, parent_title, a
         task_responsible_emails = []
         for user_id in task_details.get("responsibleIds", []):
             try:
-                task_responsible_emails.append(get_user_details(user_id, access_token))
+                task_responsible_emails.append(get_user_details(user_id, access_token, user_cache))
             except Exception as e:
                 print(f"Error fetching user details for {user_id}: {e}")
                 task_responsible_emails.append("Unknown")
