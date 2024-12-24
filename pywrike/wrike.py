@@ -2026,9 +2026,9 @@ def process_space(space, access_token):
     # Add custom fields and workflows to workspace data
     workspace_data["custom_fields"] = custom_fields
     workspace_data["workflows"] = workflows
-
-    # Save workspace data to JSON
+     # Save workspace data to JSON
     save_to_json(workspace_data, filename)
+    filename = f"export_{space_name}.json"
     print(f"Data for space '{space_title}' saved to {filename}")
 
 # Function to get details of subtasks recursively
