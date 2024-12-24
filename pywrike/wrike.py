@@ -1923,7 +1923,7 @@ def get_filtered_custom_fields(access_token, space_id=None):
         # Filter custom fields for the specific space or applicable to all spaces
         filtered_fields = [
             field for field in custom_fields
-            if field.get('spaceId') == space_idab
+            if field.get('spaceId') == space_id
         ]
         return filtered_fields
     except json.JSONDecodeError as e:
