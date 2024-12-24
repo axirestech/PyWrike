@@ -293,7 +293,16 @@ def get_tasks_in_space(space_id, access_token):
 
 # Function to get all tasks by folder ID
 def get_tasks_by_folder_id(folder_id, access_token):
-    endpoint = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks/?fields=["subTaskIds", "effortAllocation","authorIds","customItemTypeId","responsibleIds","description","hasAttachments","dependencyIds","superParentIds","superTaskIds","subTaskIds","metadata","customFields","parentIds","sharedIds","recurrent","briefDescription","attachmentCount"]'
+    fields = [
+        "subTaskIds", "authorIds", "customItemTypeId", "responsibleIds",
+        "description", "hasAttachments", "dependencyIds", "superParentIds",
+        "superTaskIds", "metadata", "customFields", "parentIds", "sharedIds",
+        "recurrent", "briefDescription", "attachmentCount"
+    ]
+
+    # Convert the fields list to a JSON string
+    fields_json = json.dumps(fields)
+    endpoint = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks?fields={fields_json}'
     headers = {
         'Authorization': f'Bearer {access_token}',
         'Content-Type': 'application/json'
@@ -768,7 +777,7 @@ def get_wrike_space_id(space_name, access_token):
 
 # Function to get the details of a space
 def get_space_details(space_id, access_token):
-    url = f'https://www.wrike.com/api/v4/spaces/{space_id}?fields=["members"]'
+    url = f'https://www.wrike.com/api/v4/spaces/{space_id}'
     headers = {'Authorization': f'Bearer {access_token}'}
     response = requests.get(url, headers=headers)
     response.raise_for_status()
@@ -902,7 +911,16 @@ def get_titles_hierarchy(folder_id, folders, path=""):
 
 # Function to get tasks in a folder
 def get_tasks_in_folder(folder_id, access_token):
-    url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks?fields=["subTaskIds","effortAllocation","authorIds","customItemTypeId","responsibleIds","description","hasAttachments","dependencyIds","superParentIds","superTaskIds","metadata","customFields","parentIds","sharedIds","recurrent","briefDescription","attachmentCount"]'
+    fields = [
+        "subTaskIds", "authorIds", "customItemTypeId", "responsibleIds",
+        "description", "hasAttachments", "dependencyIds", "superParentIds",
+        "superTaskIds", "metadata", "customFields", "parentIds", "sharedIds",
+        "recurrent", "briefDescription", "attachmentCount"
+    ]
+
+    # Convert the fields list to a JSON string
+    fields_json = json.dumps(fields)
+    url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks?fields={fields_json}'
     headers = {'Authorization': f'Bearer {access_token}'}
     response = requests.get(url, headers=headers)
     response.raise_for_status()
@@ -1422,7 +1440,7 @@ def get_all_folders(space_id, access_token):
 
 # Function to get task details by ID with custom status mapping
 def get_tasks_details(task_id, access_token, custom_status_mapping, custom_field_mapping):
-    url = f'https://www.wrike.com/api/v4/tasks/{task_id}?fields=["effortAllocation"]'
+    url = f'https://www.wrike.com/api/v4/tasks/{task_id}'
     headers = {'Authorization': f'Bearer {access_token}'}
     response = retry_request(url, headers=headers)
     print(f"Fetching details for task {task_id}")
@@ -1444,7 +1462,16 @@ def get_tasks_details(task_id, access_token, custom_status_mapping, custom_field
 
 # Function to get tasks for a folder
 def get_tasks_for_folder(folder_id, access_token):
-    url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks?fields=["subTaskIds","effortAllocation","authorIds","customItemTypeId","responsibleIds","description","hasAttachments","dependencyIds","superParentIds","superTaskIds","metadata","customFields","parentIds","sharedIds","recurrent","briefDescription","attachmentCount"]'
+    fields = [
+        "subTaskIds", "authorIds", "customItemTypeId", "responsibleIds",
+        "description", "hasAttachments", "dependencyIds", "superParentIds",
+        "superTaskIds", "metadata", "customFields", "parentIds", "sharedIds",
+        "recurrent", "briefDescription", "attachmentCount"
+    ]
+
+    # Convert the fields list to a JSON string
+    fields_json = json.dumps(fields)
+    url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks?fields={fields_json}'
     headers = {'Authorization': f'Bearer {access_token}'}
     response = retry_request(url, headers=headers)
     print(f"Fetching tasks for folder {folder_id}")
@@ -1613,13 +1640,24 @@ def get_subtask_details(subtask_ids, access_token):
 # Function to get tasks in a folder
 def get_tasks_in_folder_json(folder_id, access_token):
     headers = {'Authorization': f'Bearer {access_token}'}
-    url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks?fields=["subTaskIds","effortAllocation","authorIds","customItemTypeId","responsibleIds","description","hasAttachments","dependencyIds","superParentIds","superTaskIds","metadata","customFields","parentIds","sharedIds","recurrent","briefDescription","attachmentCount"]'
+    fields = [
+        "subTaskIds", "authorIds", "customItemTypeId", "responsibleIds",
+        "description", "hasAttachments", "dependencyIds", "superParentIds",
+        "superTaskIds", "metadata", "customFields", "parentIds", "sharedIds",
+        "recurrent", "briefDescription", "attachmentCount"
+    ]
+
+    # Convert the fields list to a JSON string
+    fields_json = json.dumps(fields)
+    url = f'https:/www.wrike.com/api/v4/folders/{folder_id}/tasks?fields={fields_json}'
     response = requests.get(url, headers=headers)
+    
     if response.status_code == 200:
         tasks = response.json()['data']
         for task in tasks:
+            # Fetch details of subtasks recursively
             if 'subTaskIds' in task and task['subTaskIds']:
-                task['subtasks'] = get_subtask_details(task['subTaskIds'], access_token)
+                task['subtasks'] = get_subtask_details_json(task['subTaskIds'], access_token)
         return tasks
     else:
         print(f"Failed to get tasks for folder {folder_id}. Status Code: {response.status_code}")
@@ -1772,3 +1810,224 @@ def create_subtask_propagate(parent_task_id, space_id, subtask_data, access_toke
     response = requests.post(endpoint, headers=headers, json=payload)
     response.raise_for_status()
     return response.json()['data'][0]
+
+
+# Function to create a set of unique field titles and types
+def get_unique_custom_field_titles(custom_fields):
+    unique_fields = set()
+    for field in custom_fields:
+        field_title = field["title"]
+        field_type = field["type"]
+        # Add the unique representation to the set
+        unique_fields.add(f"{field_title} [{field_type}]")
+    return unique_fields
+
+# Function to process subtasks recursively with duplicate checks
+def process_subtasks(task_id, task_key, space_name, folder_path, parent_title, access_token, 
+                     custom_status_mapping, custom_field_mapping, custom_field_names, ws, processed_subtasks, depth=1):
+    """
+    Recursively process subtasks and their nested subtasks.
+    """
+    try:
+        if task_id in processed_subtasks:
+            print(f"Skipping already processed subtask {task_id}")
+            return
+        processed_subtasks.add(task_id)
+
+        print(f"Processing task {task_id} at depth {depth}")
+
+        # Fetch task details
+        task_details = get_task_details(task_id, access_token, custom_status_mapping, custom_field_mapping)
+
+        # Extract task data
+        task_dates = task_details.get("dates", {})
+        task_start_date = task_dates.get("start", "")
+        task_due_date = task_dates.get("due", "")
+        task_duration = task_dates.get("duration", "")
+        task_efforts = task_details.get("effortAllocation", {})
+        task_effort = task_efforts.get("totalEffort", "")
+        task_html = task_details.get("description", "")
+        task_description_cleaned = clean_html(task_html)
+
+        # Fetch responsible emails
+        task_responsible_emails = []
+        for user_id in task_details.get("responsibleIds", []):
+            try:
+                task_responsible_emails.append(get_user_details(user_id, access_token))
+            except Exception as e:
+                print(f"Error fetching user details for {user_id}: {e}")
+                task_responsible_emails.append("Unknown")
+        task_responsible_emails_str = ", ".join(task_responsible_emails)
+
+        # Prepare task data
+        task_data = [
+            f"{task_key}.{depth}",
+            space_name,
+            folder_path,
+            parent_title,
+            task_details["title"],
+            task_details.get("status", ""),
+            task_details.get("importance", ""),
+            task_responsible_emails_str,
+            custom_status_mapping.get(task_details.get("customStatusId", ""), "Unknown"),
+            task_start_date,
+            task_duration,
+            task_effort,
+            task_details.get("timeSpent", ""),
+            task_due_date,
+            task_description_cleaned,
+        ]
+
+        # Add custom field values
+        for field in custom_field_names:
+            task_data.append(task_details.get("customFields", {}).get(field, ""))
+
+        # Append the task data to the worksheet
+        ws.append(task_data)
+        print(f"Task Data for ID {task_id}: {task_data}")
+
+
+        # Process nested subtasks
+        if "subTaskIds" in task_details and task_details["subTaskIds"]:
+            for subtask_id in task_details["subTaskIds"]:
+                print(f"Found nested subtask ID: {subtask_id}")
+                process_subtasks(
+                    subtask_id,
+                    f"{task_key}.{depth}",
+                    space_name,
+                    folder_path,
+                    task_details["title"],
+                    access_token,
+                    custom_status_mapping,
+                    custom_field_mapping,
+                    custom_field_names,
+                    ws,
+                    processed_subtasks,
+                    depth + 1
+                )
+        else:
+            print(f"No nested subtasks found")
+
+    except Exception as e:
+        print(f"Error processing task {task_id}: {e}")
+
+# Updated function to filter custom fields
+def get_filtered_custom_fields(access_token, space_id=None):
+    url = 'https://www.wrike.com/api/v4/customfields'
+    headers = create_headers(access_token)
+    response = retry_request(url, headers=headers)
+    print("Fetching and filtering custom fields...")
+
+    try:
+        custom_fields = response.json()["data"]
+        # Filter custom fields for the specific space or applicable to all spaces
+        filtered_fields = [
+            field for field in custom_fields
+            if field.get('spaceId') == space_idab
+        ]
+        return filtered_fields
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON response: {e}")
+        print(f"Response content: {response.content}")
+        raise
+
+def process_space_data(space_id, space_name, access_token):
+    processed_subtasks = set()  # Track processed subtasks globally
+    folders_response = get_all_folders(space_id, access_token)
+    all_paths = []
+    for folder in folders_response["data"]:
+        if "scope" in folder and folder["scope"] == "WsFolder":
+            paths = get_titles_hierarchy(folder["id"], folders_response["data"])
+            for path in paths:
+                path["path"] = path["path"].replace(f"/{space_name}", "", 1) if path["path"].startswith(f"/{space_name}/") else path["path"].replace(f"{space_name}", "")
+            all_paths.extend(paths)
+
+    workflows_response = get_custom_statuses(access_token)
+    custom_status_mapping = create_custom_status_mapping(workflows_response)
+    custom_fields = get_filtered_custom_fields(access_token, space_id)                       
+    unique_field_list = list(get_unique_custom_field_titles(custom_fields))  
+    custom_field_mapping = create_custom_field_mapping(custom_fields)
+
+    # Extract tasks and subtasks
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Tasks and Subtasks"
+
+    headers = ["Key", "Space Name", "Folder", "Parent Task", "Task Title", "Status", "Priority", "Assigned To", "Custom Status", "Start Date", "Duration", "Effort", "Time Spent", "End Date", "Description"]
+    headers.extend(unique_field_list)
+    ws.append(headers)
+
+    for folder in all_paths:
+        folder_id = folder["id"]
+        folder_path = folder["path"]
+        tasks = get_tasks_for_folder(folder_id, access_token)
+
+        for task in tasks:
+            task_key = f"T{tasks.index(task) + 1}"
+            process_subtasks(
+                task["id"],
+                task_key,
+                space_name,
+                folder_path,
+                "",
+                access_token,
+                custom_status_mapping,
+                custom_field_mapping,
+                unique_field_list,
+                ws,
+                processed_subtasks
+            )
+
+    # Save workbook
+    output_filename = f"export_{space_name.replace(' ', '_')}.xlsx"
+    wb.save(output_filename)
+    print(f"Export completed: {output_filename}")
+
+# Function to get all custom fields for a specific space
+def get_custom_fields_json(access_token, space_id=None):
+    url = f'https:/www.wrike.com/api/v4/customfields'
+    headers = {'Authorization': f'Bearer {access_token}'}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        custom_fields = response.json()['data']
+        # Filter for space-specific fields or global fields
+        if space_id:
+            custom_fields = [
+                field for field in custom_fields
+                if field.get('spaceId') == space_id
+            ]
+        return custom_fields
+    else:
+        print(f"Failed to get custom fields. Status Code: {response.status_code}")
+        return []
+
+# Function to get all workflows
+def get_workflows(access_token):
+    url = f'https://www.wrike.com/api/v4/workflows'
+    headers = {'Authorization': f'Bearer {access_token}'}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()['data']
+    else:
+        print(f"Failed to get workflows. Status Code: {response.status_code}")
+        return []
+
+def process_space(space, access_token):
+    space_id = space["id"]
+    space_title = space["title"]
+    print(f"Processing space: {space_title}")
+
+    # Fetch all folders, tasks, custom fields, and workflows
+    workspace_data = get_all_folders(space_id, access_token)
+    custom_fields = get_custom_fields_json(access_token, space_id)
+    workflows = get_workflows(access_token)
+
+    # Add custom fields and workflows to workspace data
+    workspace_data["custom_fields"] = custom_fields
+    workspace_data["workflows"] = workflows
+
+    # Save workspace data to JSON
+    filename = f'export_{space_title.replace(" ", "_")}.json'
+    save_to_json(workspace_data, filename)
+    print(f"Data for space '{space_title}' saved to {filename}")
+

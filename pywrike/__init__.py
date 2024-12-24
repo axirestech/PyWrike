@@ -77,7 +77,14 @@ from .wrike import (
     get_subtask_details,
     create_folder_or_project,
     create_subtask_propagate,
-    create_task_folder_propagate
+    create_task_folder_propagate,
+    get_unique_custom_field_titles,
+    process_subtasks,
+    process_space_data,
+    get_filtered_custom_fields,
+    get_custom_fields_json,
+    get_workflows,
+    process_space
 )
 
 # Optionally, you can define `__all__` to control what gets imported with a wildcard (*) import
@@ -87,7 +94,7 @@ __all__ = [
     "get_folder_id_by_name",
     "create_wrike_project",
     "create_wrike_folder",
-    " delete_wrike_project",
+    "delete_wrike_project",
     "delete_wrike_folder",
     "get_space_id_by_name",
     "get_folder_id_by_path",
@@ -158,6 +165,14 @@ __all__ = [
     "get_subtask_details",
     "create_folder_or_project",
     "create_subtask_propagate",
-    "create_task_folder_propagate"
+    "create_task_folder_propagate",
+    "get_unique_custom_field_titles",
+    "process_subtasks",
+    "process_space_data",
+    "get_filtered_custom_fields",
+    "get_custom_fields_json",
+    "get_workflows",
+    "process_space"
+
 ]
 
