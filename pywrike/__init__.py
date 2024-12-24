@@ -84,7 +84,8 @@ from .wrike import (
     get_filtered_custom_fields,
     get_custom_fields_json,
     get_workflows,
-    process_space
+    process_space,
+    get_subtask_details_json
 )
 
 # Optionally, you can define `__all__` to control what gets imported with a wildcard (*) import
@@ -172,7 +173,8 @@ __all__ = [
     "get_filtered_custom_fields",
     "get_custom_fields_json",
     "get_workflows",
-    "process_space"
+    "process_space",
+    "get_subtask_details_json"
 
 ]
 

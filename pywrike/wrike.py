@@ -2031,3 +2031,24 @@ def process_space(space, access_token):
     save_to_json(workspace_data, filename)
     print(f"Data for space '{space_title}' saved to {filename}")
 
+# Function to get details of subtasks recursively
+def get_subtask_details_json(subtask_ids, wrike_api_token):
+    headers = {'Authorization': f'Bearer {wrike_api_token}'}
+    subtasks = []
+    
+    for subtask_id in subtask_ids:
+        url = f'https://www.wrike.com/api/v4/tasks/{subtask_id}'
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 200:
+            subtask_data = response.json()['data'][0]
+            # Add subtask to the list
+            subtasks.append(subtask_data)
+            
+            # If the subtask has its own subtasks, fetch them recursively
+            if 'subTaskIds' in subtask_data and subtask_data['subTaskIds']:
+                subtask_data['subtasks'] = get_subtask_details_json(subtask_data['subTaskIds'], wrike_api_token)
+        else:
+            print(f"Failed to get subtask details for subtask {subtask_id}. Status Code: {response.status_code}")
+    
+    return subtasks
