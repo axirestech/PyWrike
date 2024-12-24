@@ -1649,7 +1649,7 @@ def get_tasks_in_folder_json(folder_id, access_token):
 
     # Convert the fields list to a JSON string
     fields_json = json.dumps(fields)
-    url = f'https:/www.wrike.com/api/v4/folders/{folder_id}/tasks?fields={fields_json}'
+    url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks?fields={fields_json}'
     response = requests.get(url, headers=headers)
     
     if response.status_code == 200:
@@ -1986,7 +1986,7 @@ def process_space_data(space_id, space_name, access_token):
 
 # Function to get all custom fields for a specific space
 def get_custom_fields_json(access_token, space_id=None):
-    url = f'https:/www.wrike.com/api/v4/customfields'
+    url = f'https://www.wrike.com/api/v4/customfields'
     headers = {'Authorization': f'Bearer {access_token}'}
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
