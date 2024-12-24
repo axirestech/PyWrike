@@ -1828,6 +1828,7 @@ def process_subtasks(task_id, task_key, space_name, folder_path, parent_title, a
     """
     Recursively process subtasks and their nested subtasks.
     """
+    user_cache = {}
     try:
         if task_id in processed_subtasks:
             print(f"Skipping already processed subtask {task_id}")
