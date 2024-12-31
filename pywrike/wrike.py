@@ -824,18 +824,21 @@ def create_custom_field(field_data, new_space_id, access_token):
 # Function to map custom fields from the original space to the new space
 def map_custom_fields(original_fields, original_space_id, new_space_id, access_token):
     field_mapping = {}
-           
-    # Step 1: Filter original fields by spaceId
+
+    # Step 1: Filter original fields by spaceId or include fields with no specific scope
     filtered_original_fields = [
         field for field in original_fields
-        if field.get('spaceId') == original_space_id
+        if field.get('spaceId') == original_space_id or field.get('spaceId') is None
     ]
 
     for field in filtered_original_fields:
-        # Check if the field has a valid 'scope' and belongs to the original space
-        field_scope = field.get('spaceId', [])
+        field_scope = field.get('spaceId')  # Scope is the spaceId or None for account-wide fields
         
-        if field_scope == original_space_id:
+        # If the field is account-wide, use the same ID
+        if field_scope is None:
+            print(f"Account-wide custom field detected: {field['title']}. Reusing existing field ID.")
+            field_mapping[field['id']] = field['id']
+        elif field_scope == original_space_id:
             print(f"Creating new custom field: {field['title']}")
             # Create the custom field in the new space
             new_field = create_custom_field(field, new_space_id, access_token)
@@ -846,6 +849,7 @@ def map_custom_fields(original_fields, original_space_id, new_space_id, access_t
             print(f"Field {field['title']} is skipped due to missing or invalid scope.")
 
     return field_mapping
+
 
 def map_custom_fields_propagate(original_fields, original_space_id, new_space_id, access_token):
     field_mapping = {}
@@ -1924,7 +1928,7 @@ def get_filtered_custom_fields(access_token, space_id=None):
         # Filter custom fields for the specific space or applicable to all spaces
         filtered_fields = [
             field for field in custom_fields
-            if field.get('spaceId') == space_id
+            if field.get('spaceId') == space_id or field.get('spaceId') is None
         ]
         return filtered_fields
     except json.JSONDecodeError as e:
@@ -1995,7 +1999,7 @@ def get_custom_fields_json(access_token, space_id=None):
         if space_id:
             custom_fields = [
                 field for field in custom_fields
-                if field.get('spaceId') == space_id
+                if field.get('spaceId') == space_id or field.get('spaceId') is None
             ]
         return custom_fields
     else:
