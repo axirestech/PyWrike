@@ -850,40 +850,32 @@ def map_custom_fields(original_fields, original_space_id, new_space_id, access_t
 
     return field_mapping
 
-
 def map_custom_fields_propagate(original_fields, original_space_id, new_space_id, access_token):
     field_mapping = {}
-
-    # Step 1: Retrieve all custom fields in the destination space
     destination_fields = get_custom_fields(access_token)
-    dest_space_fields = [
-        field for field in destination_fields
-        if field.get('spaceId') == new_space_id
-    ]
+    
+    # Separate account-wide fields and space-specific fields
+    account_wide_fields = [field for field in destination_fields if not field.get('spaceId')]
+    dest_space_fields = [field for field in destination_fields if field.get('spaceId') == new_space_id]
 
     for field in original_fields:
-        # Check if the field belongs to the original space
-        if field.get('spaceId') != original_space_id:
-            continue
-
-        # Check if the field already exists in the destination space
-        existing_field = next(
-            (dest_field for dest_field in dest_space_fields if dest_field['title'] == field['title']),
-            None
-        )
-
-        if existing_field:
-            print(f"Custom field '{field['title']}' already exists in the destination space. Mapping directly.")
-            field_mapping[field['id']] = existing_field['id']
-        else:
-            print(f"Creating new custom field: {field['title']}")
-            # Create the custom field in the destination space
-            new_field = create_custom_field(field, new_space_id, access_token)
-            field_mapping[field['id']] = new_field['id']
-            print(f"Mapped Custom Field: {field['title']} -> New Field ID: {new_field['id']}")
-
+        # Handle space-specific fields
+        if field.get('spaceId') == original_space_id:
+            existing_field = next((dest_field for dest_field in dest_space_fields if dest_field['title'] == field['title']), None)
+            if existing_field:
+                field_mapping[field['id']] = existing_field['id']
+            else:
+                new_field = create_custom_field(field, new_space_id, access_token)
+                field_mapping[field['id']] = new_field['id']
+        
+        # Handle account-wide fields
+        elif not field.get('spaceId'):
+            account_field = next((acc_field for acc_field in account_wide_fields if acc_field['title'] == field['title']), None)
+            if account_field:
+                # Map directly to the account-wide field ID
+                field_mapping[field['id']] = account_field['id']
+    
     return field_mapping
-
 
 # Function to get folders in a space
 def get_folders_in_space(space_id, access_token):
@@ -1684,13 +1676,13 @@ def get_all_folders_json(workspace_id, access_token):
     return workspace_data
 
 
-def create_task_folder_propagate(folder_id, task_data, access_token, mapped_custom_fields=None):
+def create_task_folder_propagate(folder_id, task_data, access_token, custom_field_mapping=None):
     url = f'https://www.wrike.com/api/v4/folders/{folder_id}/tasks'
     headers = {
         'Authorization': f'Bearer {access_token}',
         'Content-Type': 'application/json'
     }
-    
+        
     task_dates = task_data.get('dates', {})
     start_date = task_dates.get('start', "")
     due_date = task_dates.get('due', "")
@@ -1708,9 +1700,8 @@ def create_task_folder_propagate(folder_id, task_data, access_token, mapped_cust
         dates["duration"] = duration_date
   
     effortAllocation = task_data.get('effortAllocation', {})
-    
     effort_allocation_payload = {}
-    if effortAllocation.get('mode') in ['Basic', 'Flexible', 'None', 'FullTime']:  # Check valid modes
+    if effortAllocation.get('mode') in ['Basic', 'Flexible', 'None', 'FullTime']:
         effort_allocation_payload['mode'] = effortAllocation.get('mode')
         if 'totalEffort' in effortAllocation:
             effort_allocation_payload['totalEffort'] = effortAllocation['totalEffort']
@@ -1719,15 +1710,18 @@ def create_task_folder_propagate(folder_id, task_data, access_token, mapped_cust
         if 'dailyAllocationPercentage' in effortAllocation:
             effort_allocation_payload['dailyAllocationPercentage'] = effortAllocation['dailyAllocationPercentage']
     
-    
     payload = {
         "title": task_data.get("title", ""),
         "description": task_data.get("description", ""),
-        "responsibles": task_data.get("responsibleIds", []),        
+        "responsibles": task_data.get("responsibleIds", []),
         "customStatus": task_data.get("customStatusId", ""),
         "importance": task_data.get("importance", ""),
         "metadata": task_data.get("metadata", []),
-        "customFields": mapped_custom_fields or []  
+        "customFields": [
+            {"id": custom_field_mapping[field['id']], "value": field['value']}
+            for field in task_data.get('customFields', [])
+            if field['id'] in custom_field_mapping
+        ]
     }
     
     if dates:
@@ -1736,26 +1730,48 @@ def create_task_folder_propagate(folder_id, task_data, access_token, mapped_cust
     if effortAllocation:
         payload["effortAllocation"] = effort_allocation_payload
             
-        # Create task
+    # Create task
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
     created_task = response.json()['data'][0]
     parent_task_id = created_task['id']
     
-    # Handle subtask creation
-    for sub_task_id in task_data.get('subTaskIds', []):
-        subtask_data = get_task_detail(sub_task_id, access_token)
-        create_subtask_propagate(parent_task_id, task_data.get('spaceId'), subtask_data, access_token, mapped_custom_fields)
     
+    # Ensure custom_field_mapping is a dictionary
+    if not isinstance(custom_field_mapping, dict):
+        raise ValueError("custom_field_mapping must be a dictionary.")
+
+    
+    # Track processed subtasks
+    processed_subtasks = set()
+
+    for sub_task_id in task_data.get('subTaskIds', []):
+        if sub_task_id in processed_subtasks:
+            continue
+        processed_subtasks.add(sub_task_id)
+
+        subtask_data = get_task_detail(sub_task_id, access_token)
+        if not subtask_data:
+            print(f"Failed to retrieve subtask data for ID {sub_task_id}")
+            continue
+
+        create_subtask_propagate(
+            parent_task_id,
+            task_data.get('spaceId'),
+            subtask_data,
+            access_token,
+            custom_field_mapping,
+            processed_subtasks  # Pass the tracking set
+        )
     return created_task
 
-def create_subtask_propagate(parent_task_id, space_id, subtask_data, access_token, mapped_custom_fields=None):
+def create_subtask_propagate(parent_task_id, space_id, subtask_data, access_token, custom_field_mapping, processed_subtasks):
     endpoint = f'https://www.wrike.com/api/v4/tasks'
     headers = {
         'Authorization': f'Bearer {access_token}',
         'Content-Type': 'application/json'
     }
-  
+ 
     subtask_dates = subtask_data.get('dates', {})
     start_date = subtask_dates.get('start', "")
     due_date = subtask_dates.get('due', "")
@@ -1782,17 +1798,22 @@ def create_subtask_propagate(parent_task_id, space_id, subtask_data, access_toke
             effort_allocation_payload['allocatedEffort'] = effortAllocation['allocatedEffort']
         if 'dailyAllocationPercentage' in effortAllocation:
             effort_allocation_payload['dailyAllocationPercentage'] = effortAllocation['dailyAllocationPercentage']
-    
-    # Map and format custom fields for the subtask
-    custom_fields = []
-    for field in subtask_data.get("customFields", []):
-        if field['id'] in mapped_custom_fields:
-            mapped_field_id = mapped_custom_fields[field['id']]
-            custom_fields.append({
-                "id": mapped_field_id,
-                "value": field.get('value', '')  # Subtask-specific value
-            })  
 
+    
+    if not isinstance(custom_field_mapping, dict):
+        raise ValueError("custom_field_mapping must be a dictionary.")
+    
+    # Process custom fields for the subtask
+    mapped_custom_fields = [
+        {
+            'id': custom_field_mapping[field['id']],
+            'value': field['value']
+        }
+        for field in subtask_data.get('customFields', [])
+        if field['id'] in custom_field_mapping
+    ]
+    
+    # Construct payload
     payload = {
         "title": subtask_data.get("title", ""),
         "description": subtask_data.get("description", ""),
@@ -1800,21 +1821,36 @@ def create_subtask_propagate(parent_task_id, space_id, subtask_data, access_toke
         "responsibles": subtask_data.get("responsibleIds", []),        
         "customStatus": subtask_data.get("customStatusId", ""),
         "importance": subtask_data.get("importance", ""),
-        "metadata": subtask_data.get("metadata", []),
-        "customFields": custom_fields  # Subtask-specific custom fields
+        "metadata": subtask_data.get("metadata", [])
     }
-    
     if dates:
         payload["dates"] = dates
-    
-    if effortAllocation:
+    if effort_allocation_payload:
         payload["effortAllocation"] = effort_allocation_payload
-    
+    # Add mapped custom fields only if available
+    if mapped_custom_fields:
+        payload["customFields"] = mapped_custom_fields  # Attach custom fields to the subtask
+
     # Create subtask
     response = requests.post(endpoint, headers=headers, json=payload)
     response.raise_for_status()
-    return response.json()['data'][0]
-
+    created_subtask = response.json()['data'][0]
+    subtask_id = created_subtask['id']
+    
+    # Recursively handle nested subtasks
+    for nested_sub_task_id in subtask_data.get('subTaskIds', []):
+        nested_subtask_data = get_task_detail(nested_sub_task_id, access_token)
+        if not nested_subtask_data:
+            print(f"Warning: No data found for nested subtask ID {nested_sub_task_id}")
+            continue
+        create_subtask_propagate(
+            parent_task_id=subtask_id,
+            space_id=space_id,
+            subtask_data=nested_subtask_data,
+            access_token=access_token,
+            custom_field_mapping=custom_field_mapping,
+            processed_subtasks=processed_subtasks
+        )
 
 # Function to create a set of unique field titles and types
 def get_unique_custom_field_titles(custom_fields):
