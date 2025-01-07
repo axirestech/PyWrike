@@ -131,6 +131,23 @@ def delete_wrike_folder(access_token, parent_folder_id, folder_title):
         print(f"Failed to delete folder '{folder_title}'. Status code: {response.status_code}")
         print(response.text)
 
+# Function to delete a folder in Wrike by folder ID
+def delete_wrike_folder_by_id(access_token, folder_id):
+    endpoint = f'https://www.wrike.com/api/v4/folders/{folder_id}'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+
+    response = requests.delete(endpoint, headers=headers)
+
+    if response.status_code == 200:
+        print(f"Folder with ID '{folder_id}' deleted successfully!")
+    else:
+        print(f"Failed to delete folder with ID '{folder_id}'. Status code: {response.status_code}")
+        print(response.text)
+
+
 # Function to delete a project in Wrike
 def delete_wrike_project(access_token, parent_folder_id, project_title):
     project_id = get_subfolder_id_by_name(parent_folder_id, project_title, access_token)
@@ -1238,6 +1255,29 @@ def get_folder_id_by_paths(folder_path, space_id, access_token):
         
         if not parent_folder_id:
             print(f"Folder '{folder_name}' not found.")
+            return None
+
+    return parent_folder_id
+
+# Function to get the ID of a folder by its full path within a space
+def get_folder_id_by_paths_2(folder_path, space_id, access_token, path_separator='\\'):
+    folder_names = folder_path.strip().split(path_separator)  # Split the folder path into individual folders
+    parent_folder_id = None  # Start with no parent folder
+
+    for folder_name in folder_names:
+        folder_name = folder_name.strip()
+        if not folder_name:
+            continue  # Skip empty segments
+
+        if parent_folder_id:
+            # Fetch subfolder of the current parent folder
+            parent_folder_id = get_subfolder_id_by_name(parent_folder_id, folder_name, access_token)
+        else:
+            # Fetch top-level folder in the given space
+            parent_folder_id = get_folder_in_space_by_name(folder_name, space_id, access_token)
+
+        if not parent_folder_id:
+            print(f"Folder '{folder_name}' not found in the path '{folder_path}'.")
             return None
 
     return parent_folder_id
