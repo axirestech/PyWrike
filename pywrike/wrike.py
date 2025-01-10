@@ -2132,3 +2132,22 @@ def get_subtask_details_json(subtask_ids, wrike_api_token):
             print(f"Failed to get subtask details for subtask {subtask_id}. Status Code: {response.status_code}")
     
     return subtasks
+
+def delete_task(task_id, access_token):
+    
+    api_url = f"https://www.wrike.com/api/v4/tasks/{task_id}"
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+
+    try:
+        response = requests.delete(api_url, headers=headers)
+        if response.status_code == 200:
+            print(f"Task with ID '{task_id}' deleted successfully.")
+            return True
+        else:
+            print(f"Failed to delete task with ID '{task_id}'. Status code: {response.status_code}. Response: {response.text}")
+            return False
+    except Exception as e:
+        print(f"An error occurred while trying to delete task '{task_id}': {e}")
+        return False

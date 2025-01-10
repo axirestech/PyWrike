@@ -87,7 +87,8 @@ from .wrike import (
     process_space,
     get_subtask_details_json,
     delete_wrike_folder_by_id,
-    get_folder_id_by_paths_2
+    get_folder_id_by_paths_2,
+    delete_task
 )
 
 # Optionally, you can define `__all__` to control what gets imported with a wildcard (*) import
@@ -178,6 +179,7 @@ __all__ = [
     "process_space",
     "get_subtask_details_json",
     "delete_wrike_folder_by_id",
-    "get_folder_id_by_paths_2"
+    "get_folder_id_by_paths_2",
+    "delete_task"
 ]
 
